@@ -1,9 +1,0 @@
-.env
-news_sentiment_cache.json
-scan_cache.json
-scan_history.json
-*.tmp
-__pycache__/
-*.pyc
-.venv/
-venv/
