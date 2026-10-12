@@ -48,9 +48,36 @@ function scanConfigsMatch(first, second) {
     === JSON.stringify({ ...second, sectors: [...(second.sectors || [])].sort() });
 }
 
+function enrichResult(row) {
+  // تقييم واجهة تفسيري فقط: يجمع الإشارات الموجودة بالفعل ولا يستبدل منطق التحليل بالخادم.
+  let score = 50;
+  const decision = String(row["قرار السوينغ"] || "");
+  const rsi = Number(row.RSI);
+  const mfi = Number(row.MFI);
+  const liquidity = Number(row["السيولة"]);
+
+  if (/🔥|اشترِ الآن/.test(decision)) score += 20;
+  else if (/اشترِ/.test(decision)) score += 12;
+  else if (/لا تشترِ|⛔|❌/.test(decision)) score -= 18;
+  if (Number.isFinite(rsi) && rsi >= 45 && rsi <= 68) score += 7;
+  else if (Number.isFinite(rsi) && (rsi > 75 || rsi < 25)) score -= 6;
+  if (Number.isFinite(mfi) && mfi >= 50) score += 7;
+  if (Number.isFinite(liquidity) && liquidity >= 1.5) score += 8;
+  if (String(row["مستوى المخاطرة"] || "").includes("مرتفع")) score -= 7;
+
+  return { ...row, "قوة الإشارة": Math.max(0, Math.min(100, Math.round(score))) };
+}
+
+function signalLabel(score) {
+  if (score >= 75) return "قوية";
+  if (score >= 55) return "متوازنة";
+  return "حذرة";
+}
+
 const RESULT_COLUMNS = [
   ["اسم الشركة", "الشركة", "text"],
   ["الرمز", "الرمز", "text"],
+  ["قوة الإشارة", "قوة الإشارة", "score"],
   ["قرار السوينغ", "قرار السوينغ", "badge"],
   ["نصيحة المالك", "نصيحة المالك", "badge"],
   ["نوع السهم", "تصنيف فني", "text"],
@@ -228,7 +255,10 @@ function hideScanProgress() {
 
 function applyScanData(data) {
   if (!Array.isArray(data.results) || !Array.isArray(data.dropped)) return;
-  state.results = data.results;
+  state.results = data.results.map(enrichResult)
+    .sort((first, second) => second["قوة الإشارة"] - first["قوة الإشارة"]);
+  state.sortCol = "قوة الإشارة";
+  state.sortDir = "desc";
   state.dropped = data.dropped;
   state.totalStocks = data.total_stocks;
   state.lastCache = data.cache || null;
@@ -389,6 +419,13 @@ function renderStats(data) {
     ? (data.results.reduce((s, r) => s + (r["التغير %"] || 0), 0) / data.results.length).toFixed(2)
     : "0.00";
   document.getElementById("statAvgChange").textContent = avgChange + "%";
+  const summary = document.getElementById("signalSummary");
+  if (summary) {
+    const strong = state.results.filter(row => row["قوة الإشارة"] >= 75).length;
+    const balanced = state.results.filter(row => row["قوة الإشارة"] >= 55 && row["قوة الإشارة"] < 75).length;
+    summary.innerHTML = `<span><strong>${strong}</strong> إشارة قوية</span><span><strong>${balanced}</strong> فرصة متوازنة</span><span>التقييم للتصفية والمقارنة، وليس توصية</span>`;
+    summary.hidden = false;
+  }
 }
 
 function renderSectorPerformance(rows) {
@@ -450,15 +487,13 @@ function renderHistory(history) {
 
   const latest = history.at(-1);
   const previous = history.at(-2);
-  const overallDelta = latest.average_change != null && previous?.average_change != null
-    ? latest.average_change - previous.average_change : null;
-  overallBody.innerHTML = [...history].reverse().slice(0, 10).map((item, index, rows) => {
-    const older = rows[index + 1];
-    const delta = item.average_change != null && older?.average_change != null
-      ? item.average_change - older.average_change : null;
+  overallBody.innerHTML = [...history].reverse().slice(0, 10).map(item => {
+    const scanReturn = Number.isFinite(Number(item.scan_return_pct))
+      ? `${formatPercent(item.scan_return_pct)}<small class="horizon-asof">على ${item.compared_stock_count || 0} سهم مشترك</small>`
+      : '<span class="text-tertiary">يلزم فحصان بأسعار قابلة للمقارنة</span>';
     return `<tr><td>${escapeHtml(new Date(item.captured_at).toLocaleString("ar-EG"))}</td>
       <td class="num">${item.matched_count} / ${item.total_stocks}</td>
-      <td>${formatPercent(item.average_change)}</td><td>${formatDelta(delta)}</td></tr>`;
+      <td>${formatPercent(item.average_change)}</td><td>${scanReturn}</td></tr>`;
   }).join("");
 
   const sectorNames = new Set([
@@ -484,9 +519,6 @@ function renderHistory(history) {
     : `تم حفظ أول نقطة مقارنة في ${timestamp}. ستظهر مقارنة زمنية بعد الفحص التالي.`;
   count.textContent = `${history.length} لقطة محفوظة`;
   document.getElementById("historyPanel").style.display = "block";
-  if (overallDelta !== null && history.length > 1) {
-    description.dataset.latestDelta = overallDelta.toFixed(2);
-  }
 }
 
 function formatPercent(value) {
@@ -522,6 +554,12 @@ function formatMixedDirectionText(value) {
 }
 
 function formatCell(value, type) {
+  if (type === "score") {
+    const score = Number(value);
+    if (!Number.isFinite(score)) return '<span style="color:var(--text-tertiary)">—</span>';
+    const tone = score >= 75 ? "strong" : score >= 55 ? "balanced" : "cautious";
+    return `<span class="signal-score ${tone}"><b>${score}</b><small>${signalLabel(score)}</small></span>`;
+  }
   if (type === "forecast") {
     if (value === null || value === undefined || typeof value !== "object" || value.low_pct === undefined || value.high_pct === undefined) {
       return '<span class="forecast-unavailable" title="تحتاج بيانات يومية تاريخية كافية">غير متاح</span>';
@@ -657,7 +695,7 @@ function renderColumnFilter(key, label, type, rows) {
     const text = state.columnFilters[key]?.text || "";
     return `<input class="column-filter" type="search" value="${escapeHtml(text)}" data-filter-key="${escapeHtml(key)}" data-filter-mode="text" aria-label="بحث ${escapeHtml(label)}" placeholder="بحث…">`;
   }
-  if (["num", "pct", "forecast"].includes(type)) {
+  if (["num", "pct", "forecast", "score"].includes(type)) {
     const metric = type === "forecast" ? "low_pct" : "";
     const values = state.columnFilters[key] || {};
     return `<div class="column-filter column-filter-range">
@@ -796,32 +834,34 @@ async function openStockDetail(row) {
   overlay.classList.add("open");
   content.innerHTML = `
     <h2 style="margin-top:0;">${escapeHtml(row["اسم الشركة"])} <span class="num" style="color:var(--text-secondary);">(${escapeHtml(row["الرمز"])})</span></h2>
-    <div class="panel">
-      <strong>🧭 التصنيف الفني والمخاطر</strong>
-      <p>${escapeHtml(row["نوع السهم"] || "غير محدد")} · مستوى المخاطرة: ${escapeHtml(row["مستوى المخاطرة"] || "غير محدد")}</p>
-      <p class="mixed-direction-text" dir="rtl">${formatMixedDirectionText(row["سبب التصنيف"] || "لا يوجد تفسير متاح.")}</p>
+    <section class="detail-signal-card">
+      <div class="detail-score"><strong>${row["قوة الإشارة"] ?? "—"}</strong><span>قوة الإشارة</span></div>
+      <div><strong>${escapeHtml(row["قرار السوينغ"] || "انتظر")}</strong><p>${escapeHtml(row["نوع السهم"] || "غير محدد")} · مخاطرة ${escapeHtml(row["مستوى المخاطرة"] || "غير محددة")}</p></div>
+    </section>
+    <div class="detail-tabs" role="tablist" aria-label="تفاصيل السهم">
+      <button type="button" class="detail-tab active" data-detail-tab="overview">الملخص</button>
+      <button type="button" class="detail-tab" data-detail-tab="strategy">الخطة</button>
+      <button type="button" class="detail-tab" data-detail-tab="news">الأخبار</button>
     </div>
-    <div class="panel">
-      <strong>☪️ الفلتر الشرعي الأولي — ليس اعتمادًا أو فتوى</strong>
-      <p>${escapeHtml(row["الفلتر الشرعي (أولي)"] || "غير محسوم")}</p>
-      <p class="mixed-direction-text" dir="rtl">${formatMixedDirectionText(row["شرح الفلتر الشرعي"] || "يستلزم فحصًا ماليًا ومراجعة مختصة.")}</p>
-    </div>
-    <div class="panel">
-      <strong>🎯 استراتيجية الدخول والخروج</strong>
-      <p class="mixed-direction-text" dir="rtl">${formatMixedDirectionText(row["استراتيجية الدخول والخروج"] || "—")}</p>
-    </div>
-    <div class="panel">
-      <strong>⚡ قرار السوينغ</strong>
-      <p class="mixed-direction-text" dir="rtl">${formatMixedDirectionText(row["شرح السوينغ"] || "—")}</p>
-    </div>
-    <div class="panel">
-      <strong>🏦 نصيحة المالك</strong>
-      <p class="mixed-direction-text" dir="rtl">${formatMixedDirectionText(row["شرح نصيحة المالك"] || "—")}</p>
-    </div>
-    <div class="panel" id="newsPanel">
-      <span class="loading-spinner"></span> جاري جلب الأخبار والإعلانات…
-    </div>
+    <section class="detail-section active" data-detail-section="overview">
+      <div class="panel"><strong>🧭 التصنيف الفني والمخاطر</strong><p class="mixed-direction-text" dir="rtl">${formatMixedDirectionText(row["سبب التصنيف"] || "لا يوجد تفسير متاح.")}</p></div>
+      <div class="panel"><strong>☪️ الفلتر الشرعي الأولي — ليس اعتمادًا أو فتوى</strong><p>${escapeHtml(row["الفلتر الشرعي (أولي)"] || "غير محسوم")}</p><p class="mixed-direction-text" dir="rtl">${formatMixedDirectionText(row["شرح الفلتر الشرعي"] || "يستلزم فحصًا ماليًا ومراجعة مختصة.")}</p></div>
+    </section>
+    <section class="detail-section" data-detail-section="strategy">
+      <div class="panel"><strong>🎯 استراتيجية الدخول والخروج</strong><p class="mixed-direction-text" dir="rtl">${formatMixedDirectionText(row["استراتيجية الدخول والخروج"] || "—")}</p></div>
+      <div class="panel"><strong>⚡ قرار السوينغ</strong><p class="mixed-direction-text" dir="rtl">${formatMixedDirectionText(row["شرح السوينغ"] || "—")}</p></div>
+      <div class="panel"><strong>🏦 نصيحة المالك</strong><p class="mixed-direction-text" dir="rtl">${formatMixedDirectionText(row["شرح نصيحة المالك"] || "—")}</p></div>
+    </section>
+    <section class="detail-section" data-detail-section="news"><div class="panel" id="newsPanel"><span class="loading-spinner"></span> جاري جلب الأخبار والإعلانات…</div></section>
   `;
+
+  content.querySelectorAll("[data-detail-tab]").forEach(button => {
+    button.addEventListener("click", () => {
+      const tab = button.dataset.detailTab;
+      content.querySelectorAll("[data-detail-tab]").forEach(item => item.classList.toggle("active", item === button));
+      content.querySelectorAll("[data-detail-section]").forEach(section => section.classList.toggle("active", section.dataset.detailSection === tab));
+    });
+  });
 
   try {
     const resp = await fetch(`${API_BASE}/api/stock/${encodeURIComponent(row["الرمز"])}/news?company_name=${encodeURIComponent(row["اسم الشركة"])}`);

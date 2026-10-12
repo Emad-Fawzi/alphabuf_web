@@ -343,6 +343,24 @@ def _valid_number(value):
     return number if math.isfinite(number) else None
 
 
+def _scan_return_since_previous(snapshot, previous_snapshot):
+    """متوسط عائد الأسعار بين لقطتين لنفس الأسهم، لا فرق تغيرات اليوم بين اللقطتين."""
+    current_prices = snapshot.get("stock_prices", {})
+    previous_prices = previous_snapshot.get("stock_prices", {}) if previous_snapshot else {}
+    returns = []
+    for ticker, current_data in current_prices.items():
+        current_price = _valid_number(current_data.get("price")) if isinstance(current_data, dict) else None
+        previous_data = previous_prices.get(ticker, {})
+        previous_price = _valid_number(previous_data.get("price")) if isinstance(previous_data, dict) else None
+        if current_price is None or previous_price is None or previous_price <= 0:
+            continue
+        returns.append((current_price / previous_price - 1) * 100)
+    return {
+        "scan_return_pct": round(sum(returns) / len(returns), 2) if returns else None,
+        "compared_stock_count": len(returns),
+    }
+
+
 def _make_history_snapshot(timeframe, result):
     result_rows = result.get("results", [])
     changes = [change for row in result_rows if (change := _valid_number(row.get("التغير %"))) is not None]
@@ -387,12 +405,20 @@ def _make_history_snapshot(timeframe, result):
         sector_changes = summary["changes"]
         sector_performance[sector] = sum(sector_changes) / len(sector_changes) if sector_changes else None
 
+    stock_prices = {}
+    for row in result_rows:
+        ticker = row.get("الرمز")
+        price = _valid_number(row.get("السعر"))
+        if ticker and price is not None and price > 0:
+            stock_prices[str(ticker)] = {"price": price, "sector": row.get("القطاع") or "غير مصنف"}
+
     return {
         "captured_at": datetime.now(timezone.utc).isoformat(),
         "timeframe": timeframe,
         "matched_count": len(result_rows),
         "total_stocks": result.get("total_stocks", 0),
         "average_change": overall_average,
+        "stock_prices": stock_prices,
         "sectors": sectors,
         "sector_performance": sector_performance,
     }
@@ -461,20 +487,10 @@ def _record_scan_history(key, timeframe, result):
     snapshot = _make_history_snapshot(timeframe, result)
     with _scan_history_lock:
         entries = _scan_history.setdefault(history_id, [])
-        same_period = False
-        if entries and timeframe == "يومي":
-            same_period = entries[-1].get("captured_at", "")[:10] == snapshot["captured_at"][:10]
-        elif entries and timeframe == "أسبوعي":
-            try:
-                old_date = datetime.fromisoformat(entries[-1]["captured_at"])
-                new_date = datetime.fromisoformat(snapshot["captured_at"])
-                same_period = old_date.isocalendar()[:2] == new_date.isocalendar()[:2]
-            except (KeyError, ValueError):
-                same_period = False
-        if same_period:
-            entries[-1] = snapshot
-        else:
-            entries.append(snapshot)
+        # «الفحص السابق» يعني آخر تشغيل فعلي، حتى لو تكرر في اليوم نفسه.
+        # الاستبدال اليومي القديم كان يمحو نقطة المقارنة ويحوّل الرقم إلى فرق تغيّر يومي مضلل.
+        snapshot.update(_scan_return_since_previous(snapshot, entries[-1] if entries else None))
+        entries.append(snapshot)
         _scan_history[history_id] = entries[-400:]
 
         if len(_scan_history) > 50:
