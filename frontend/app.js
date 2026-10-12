@@ -592,9 +592,11 @@ function renderSectorPerformance(rows) {
   const panel = document.getElementById("sectorPerformancePanel");
   const body = document.getElementById("sectorPerformanceBody");
   const count = document.getElementById("sectorPerformanceCount");
+  const chart = document.getElementById("sectorPerformanceChart");
   if (!rows || rows.length === 0) {
     panel.style.display = "none";
     body.replaceChildren();
+    chart.replaceChildren();
     return;
   }
 
@@ -614,15 +616,24 @@ function renderSectorPerformance(rows) {
     return { sector, stocks, ranked, average };
   }).sort((a, b) => (b.average ?? -Infinity) - (a.average ?? -Infinity));
 
+  const largestMove = Math.max(1, ...summaries.map(item => Math.abs(item.average ?? 0)));
+  chart.innerHTML = summaries.map(({ sector, average }) => {
+    const width = Math.min(100, Math.abs(average ?? 0) / largestMove * 100);
+    const trend = average > 0 ? "up" : average < 0 ? "down" : "flat";
+    return `<div class="sector-chart-row"><span>${escapeHtml(sector)}</span><div class="sector-chart-track"><i class="${trend}" style="width:${width}%"></i></div><b class="num ${trend === "up" ? "pct-up" : trend === "down" ? "pct-down" : ""}">${average === null ? "—" : `${average > 0 ? "+" : ""}${average.toFixed(2)}%`}</b></div>`;
+  }).join("");
+
   body.innerHTML = summaries.map(({ sector, stocks, ranked, average }) => {
     const leader = ranked[0];
     const avgClass = average > 0 ? "pct-up" : average < 0 ? "pct-down" : "";
     const leaderChange = leader ? Number(leader["التغير %"]) : null;
     const leaderClass = leaderChange > 0 ? "pct-up" : leaderChange < 0 ? "pct-down" : "";
+    const stockList = stocks.slice().sort((a, b) => Number(b["التغير %"]) - Number(a["التغير %"])).slice(0, 12)
+      .map(stock => `<li><span>${escapeHtml(stock["اسم الشركة"] || "—")}</span><b class="num ${Number(stock["التغير %"]) > 0 ? "pct-up" : Number(stock["التغير %"]) < 0 ? "pct-down" : ""}">${Number.isFinite(Number(stock["التغير %"])) ? `${Number(stock["التغير %"]) > 0 ? "+" : ""}${Number(stock["التغير %"]).toFixed(2)}%` : "—"}</b></li>`).join("");
     return `
       <tr>
         <td>${escapeHtml(sector)}</td>
-        <td class="num">${stocks.length}</td>
+        <td><span class="sector-count-popover" tabindex="0">${stocks.length}<span class="sector-stock-tooltip" role="tooltip"><strong>${escapeHtml(sector)}</strong><small>أول ${Math.min(stocks.length, 12)} شركة حسب التغير</small><ul>${stockList}</ul></span></span></td>
         <td>${average === null ? "—" : `<span class="num ${avgClass}">${average > 0 ? "+" : ""}${average.toFixed(2)}%</span>`}</td>
         <td>${leader ? `<div class="sector-leader"><span class="sector-leader-name">${escapeHtml(leader["اسم الشركة"] || "—")}</span><span class="sector-leader-ticker">${escapeHtml(leader["الرمز"] || "")}</span><span class="num ${leaderClass}">${leaderChange > 0 ? "+" : ""}${leaderChange.toFixed(2)}%</span></div>` : "—"}</td>
       </tr>`;
@@ -866,9 +877,10 @@ function renderColumnFilter(key, label, type, rows) {
   const values = [...new Set(rows.map(row => row[key]).filter(value => value !== null && value !== undefined && String(value).trim() !== ""))]
     .sort((a, b) => String(a).localeCompare(String(b), "ar"));
   if (!values.length) return "";
-  const selectedValue = state.columnFilters[key] || "";
-  return `<select class="column-filter" data-filter-key="${escapeHtml(key)}" aria-label="فلترة ${escapeHtml(label)}">
-    <option value="">الكل</option>${values.map(value => `<option value="${escapeHtml(value)}" ${String(value) === selectedValue ? "selected" : ""}>${escapeHtml(value)}</option>`).join("")}
+  const saved = state.columnFilters[key];
+  const selectedValues = Array.isArray(saved) ? saved : saved ? [saved] : [];
+  return `<select class="column-filter column-filter-multiple" multiple size="${Math.min(4, values.length)}" data-filter-key="${escapeHtml(key)}" aria-label="فلترة متعددة ${escapeHtml(label)}" title="يمكن اختيار أكثر من قيمة">
+    ${values.map(value => `<option value="${escapeHtml(value)}" ${selectedValues.includes(String(value)) ? "selected" : ""}>${escapeHtml(value)}</option>`).join("")}
   </select>`;
 }
 
@@ -934,8 +946,9 @@ function applySearch() {
     if (document.activeElement === control) {
       if (control.dataset.filterMode === "text") {
         state.columnFilters[key] = { text: control.value };
-      } else if (control.tagName === "SELECT") state.columnFilters[key] = control.value;
-      else {
+      } else if (control.tagName === "SELECT") {
+        state.columnFilters[key] = [...control.selectedOptions].map(option => option.value);
+      } else {
         state.columnFilters[key] ||= {};
         state.columnFilters[key][control.dataset.bound] = control.value;
       }
@@ -948,6 +961,7 @@ function applySearch() {
 
     return Object.entries(state.columnFilters).every(([key, filter]) => {
       const rawValue = row[key];
+      if (Array.isArray(filter)) return filter.length === 0 || filter.includes(String(rawValue ?? ""));
       if (typeof filter === "string") return !filter || String(rawValue ?? "") === filter;
       if (filter && typeof filter.text === "string") {
         return !filter.text || String(rawValue ?? "").toLocaleLowerCase("ar").includes(filter.text.toLocaleLowerCase("ar"));

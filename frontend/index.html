@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AlphaBuf — محرك فحص البورصة المصرية</title>
-  <link rel="stylesheet" href="style.css?v=16">
+  <link rel="stylesheet" href="style.css?v=17">
 </head>
 <body>
 
@@ -66,13 +66,14 @@
         <div class="stat-box"><div class="label">أسهم مستبعدة</div><div class="value" id="statExcluded">—</div></div>
         <div class="stat-box"><div class="label">متوسط التغير %</div><div class="value" id="statAvgChange">—</div></div>
       </div>
-      <section class="panel history-panel" id="historyPanel" style="display: none;">
+      <details class="panel history-panel strategy-guide" id="historyPanel" style="display: none;">
+        <summary><span>📊 مقارنة الأداء بالفحوصات السابقة</span><span class="sector-performance-count" id="historyCount"></span></summary>
+        <div class="strategy-guide-content">
         <div class="sector-performance-heading">
           <div>
             <h3>مقارنة الأداء بالفحوصات السابقة</h3>
             <p id="historyDescription">مقارنة محفوظة لنفس إعدادات الفحص والإطار الزمني.</p>
           </div>
-          <span class="sector-performance-count" id="historyCount"></span>
         </div>
         <div class="sector-performance-table-wrap">
           <table class="sector-performance-table history-table">
@@ -87,7 +88,8 @@
             <tbody id="historySectorBody"></tbody>
           </table>
         </div>
-      </section>
+        </div>
+      </details>
       <details class="panel strategy-guide" id="strategyGuide">
         <summary>📘 استراتيجية التحليل وكيفية قراءة النتائج</summary>
         <div class="strategy-guide-content">
@@ -104,14 +106,16 @@
           <p class="strategy-disclaimer">التحليل آلي وتعليمي وقد يخطئ أو يتأخر. لا يضمن الأرباح ولا يغني عن بحثك أو استشارة مختص مالي/شرعي.</p>
         </div>
       </details>
-      <section class="panel sector-performance-panel" id="sectorPerformancePanel" style="display: none;">
+      <details class="panel sector-performance-panel strategy-guide" id="sectorPerformancePanel" style="display: none;">
+        <summary><span>📈 أداء القطاعات وأعلى شركة</span><span class="sector-performance-count" id="sectorPerformanceCount"></span></summary>
+        <div class="strategy-guide-content">
         <div class="sector-performance-heading">
           <div>
             <h3>أداء القطاعات وأعلى شركة</h3>
             <p>متوسط التغير محسوب من الأسهم المطابقة في نتائج الفحص، وأعلى شركة حسب نسبة التغير.</p>
           </div>
-          <span class="sector-performance-count" id="sectorPerformanceCount"></span>
         </div>
+        <div class="sector-chart" id="sectorPerformanceChart" aria-label="رسم أداء القطاعات"></div>
         <div class="sector-performance-table-wrap">
           <table class="sector-performance-table">
             <thead>
@@ -120,7 +124,8 @@
             <tbody id="sectorPerformanceBody"></tbody>
           </table>
         </div>
-      </section>
+        </div>
+      </details>
       <div class="panel">
         <div class="signal-summary" id="signalSummary" hidden></div>
         <div class="field" style="max-width: 320px;">
@@ -218,6 +223,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=17"></script>
+  <script src="app.js?v=18"></script>
 </body>
 </html>
