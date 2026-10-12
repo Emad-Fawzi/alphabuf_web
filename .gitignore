@@ -1,0 +1,6 @@
+backend/alphabuf_accounts.sqlite3
+backend/alphabuf_accounts.sqlite3-*
+backend/.env
+backend/scan_cache.json
+backend/scan_history.json
+backend/news_sentiment_cache.json

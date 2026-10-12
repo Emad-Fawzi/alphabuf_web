@@ -39,6 +39,7 @@ from utils.executor import shared_executor
 import routers.meta
 import routers.macro
 import routers.stocks
+import routers.auth
 
 import pandas as pd
 import io
@@ -59,6 +60,7 @@ if _cors_origins:
 app.include_router(routers.meta.router)
 app.include_router(routers.macro.router)
 app.include_router(routers.stocks.router)
+app.include_router(routers.auth.router)
 
 _executor = shared_executor
 _scan_cache = {}
@@ -77,7 +79,7 @@ _SCAN_TTL_SECONDS = {
 logger = logging.getLogger(__name__)
 _SCAN_HISTORY_FILE = Path(__file__).with_name("scan_history.json")
 _SCAN_CACHE_FILE = Path(__file__).with_name("scan_cache.json")
-_SCAN_CACHE_SCHEMA = 6
+_SCAN_CACHE_SCHEMA = 7
 _SECTOR_TAXONOMY_VERSION = 5
 _scan_history_lock = threading.Lock()
 

@@ -4,13 +4,19 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AlphaBuf — محرك فحص البورصة المصرية</title>
-  <link rel="stylesheet" href="style.css?v=15">
+  <link rel="stylesheet" href="style.css?v=16">
 </head>
 <body>
 
   <div class="market-pulse" id="marketPulse">
     <span class="pulse-brand">AlphaBuf</span>
     <span id="pulseItems" style="color: var(--text-tertiary); font-size: 13px;">جاري تحميل أسعار السوق…</span>
+    <div class="account-actions">
+      <span id="userState" class="user-state">زائر</span>
+      <button id="authOpen" class="top-action">دخول / حساب</button>
+      <button id="logoutBtn" class="top-action" hidden>خروج</button>
+      <button id="adminOpen" class="top-action admin-action" hidden>لوحة الإدارة</button>
+    </div>
   </div>
 
   <aside class="control-rail">
@@ -94,7 +100,7 @@
           </ul>
           <p><strong>الإشارات:</strong> RSI وStochastic لقياس الزخم، MACD لاتجاه الزخم، OBV وحجم التداول لتدفق السيولة، ومتوسطات 20/50/200 يوم للاتجاه. مستويات الدخول والخروج والدعم والوقف حسابات فنية من آخر البيانات وليست أوامر تداول.</p>
           <p><strong>نطاقات الأسبوع/الشهر:</strong> نطاق حركة تاريخي تقريبي بمقدار انحراف معياري واحد، لا احتمال ربح ولا سعر مستهدف. الأداء الربع سنوي/النصف سنوي/السنوي يعرض العائد التاريخي الفعلي عند توافر الشموع، وقد يختلف عن عائد المستثمر بسبب التوزيعات والرسوم وسعر التنفيذ.</p>
-          <p><strong>الفلتر الشرعي:</strong> إشارة نشاط أولية فقط. لا نعتمد السهم شرعيًا دون بيانات مالية حديثة ومعيار واضح ومراجعة مختصة؛ «غير محسوم» لا تعني حلالًا أو حرامًا.</p>
+          <p><strong>حالة EGX33 Shariah:</strong> تعرض عضوية السهم في مؤشر البورصة المصرية EGX33 Shariah وفق القائمة المرجعية الحالية. عدم الإدراج لا يعني حكماً شرعياً، والعضوية تُراجع دورياً وليست فتوى فردية.</p>
           <p class="strategy-disclaimer">التحليل آلي وتعليمي وقد يخطئ أو يتأخر. لا يضمن الأرباح ولا يغني عن بحثك أو استشارة مختص مالي/شرعي.</p>
         </div>
       </details>
@@ -184,6 +190,34 @@
     </div>
   </div>
 
-  <script src="app.js?v=15"></script>
+  <div class="detail-overlay" id="authOverlay" aria-hidden="true">
+    <div class="detail-panel auth-panel">
+      <button class="detail-close" id="authClose">إغلاق ✕</button>
+      <h2>حساب AlphaBuf</h2>
+      <p class="text-tertiary">يمكنك استخدام الموقع كضيف، أو حفظ حسابك محلياً.</p>
+      <div class="auth-tabs">
+        <button class="tab-btn active" data-auth-mode="login">تسجيل الدخول</button>
+        <button class="tab-btn" data-auth-mode="register">إنشاء حساب</button>
+      </div>
+      <form id="authForm" class="auth-form">
+        <label>البريد الإلكتروني<input id="authEmail" type="email" autocomplete="email" required></label>
+        <label>كلمة المرور<input id="authPassword" type="password" autocomplete="current-password" minlength="10" required></label>
+        <button class="btn" id="authSubmit" type="submit">تسجيل الدخول</button>
+      </form>
+      <button class="btn btn-ghost" id="guestBtn">متابعة كضيف</button>
+      <p id="authError" class="auth-error" role="alert"></p>
+    </div>
+  </div>
+
+  <div class="detail-overlay" id="adminOverlay" aria-hidden="true">
+    <div class="detail-panel auth-panel">
+      <button class="detail-close" id="adminClose">إغلاق ✕</button>
+      <h2>لوحة الإدارة</h2>
+      <p class="text-tertiary">إحصاءات مجمعة، بلا عناوين IP أو بصمة متصفح.</p>
+      <div id="adminMetrics" class="admin-metrics">جارٍ تحميل الإحصاءات…</div>
+    </div>
+  </div>
+
+  <script src="app.js?v=17"></script>
 </body>
 </html>

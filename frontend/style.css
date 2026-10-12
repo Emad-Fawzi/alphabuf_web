@@ -101,6 +101,11 @@ body {
 }
 .pulse-delta.up { color: var(--market-up); background: var(--market-up-bg); }
 .pulse-delta.down { color: var(--market-down); background: var(--market-down-bg); }
+.account-actions { margin-right: auto; display: flex; align-items: center; gap: var(--space-2); white-space: nowrap; }
+.user-state { color: var(--text-secondary); font-size: 12px; }
+.top-action { border: 1px solid var(--border-hairline-strong); background: transparent; color: var(--text-primary); border-radius: var(--radius-sm); padding: 4px 9px; cursor: pointer; font: inherit; font-size: 12px; }
+.top-action:hover { border-color: var(--accent); color: var(--accent); }
+.admin-action { color: var(--accent); }
 
 .control-rail {
   grid-area: rail;
@@ -119,7 +124,7 @@ body {
 .field { margin-bottom: var(--space-3); }
 .field label { display: block; font-size: 13px; color: var(--text-secondary); margin-bottom: var(--space-1); }
 
-select, input[type="number"], input[type="text"] {
+select, input[type="number"], input[type="text"], input[type="email"], input[type="password"] {
   width: 100%;
   background: var(--bg-base);
   border: 1px solid var(--border-hairline-strong);
@@ -129,6 +134,19 @@ select, input[type="number"], input[type="text"] {
   font-family: var(--font-text);
   font-size: 14px;
 }
+
+.auth-panel { max-width: 460px; }
+.auth-panel h2 { margin: 0 0 var(--space-2); }
+.auth-tabs { display: flex; gap: var(--space-2); margin: var(--space-4) 0; }
+.auth-form { display: grid; gap: var(--space-3); }
+.auth-form label { color: var(--text-secondary); font-size: 13px; }
+.auth-form input { margin-top: var(--space-1); }
+.auth-error { min-height: 1.5em; color: #f08a78; font-size: 13px; }
+.admin-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); }
+.metric-card { border: 1px solid var(--border-hairline); background: var(--bg-base); padding: var(--space-3); border-radius: var(--radius-sm); }
+.metric-card strong { display: block; font-family: var(--font-mono); font-size: 20px; color: var(--accent); }
+.metric-card span { color: var(--text-secondary); font-size: 12px; }
+.metric-days { grid-column: 1 / -1; color: var(--text-secondary); font-size: 13px; }
 input[type="number"] { font-family: var(--font-mono); }
 select:focus, input:focus { outline: none; border-color: var(--accent); }
 

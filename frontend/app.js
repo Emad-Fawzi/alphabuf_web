@@ -24,6 +24,8 @@ let state = {
   columnFilters: {},
   sectorHorizons: {},
   columnOrders: loadColumnOrders(),
+  user: null,
+  authMode: "login",
 };
 
 function loadColumnOrders() {
@@ -84,7 +86,7 @@ const RESULT_COLUMNS = [
   ["نصيحة المالك", "نصيحة المالك", "badge"],
   ["نوع السهم", "تصنيف فني", "text"],
   ["مستوى المخاطرة", "المخاطر", "text"],
-  ["الفلتر الشرعي (أولي)", "فلتر شرعي أولي", "text"],
+  ["حالة EGX33 Shariah", "حالة EGX33 Shariah", "text"],
   ["القطاع", "القطاع", "text"],
   ["السعر", "السعر", "num"],
   ["سعر شراء مقترح", "نقطة دخول", "num"],
@@ -118,10 +120,110 @@ const GROWTH_COLUMNS = [
 ];
 
 async function init() {
+  await loadCurrentUser();
+  recordVisit();
   await Promise.all([loadSectors(), loadTimeframes(), loadMacroPrices()]);
   bindEvents();
   await initializeLatestScan();
   startLiveQuotesPolling();
+}
+
+function updateUserControls() {
+  const user = state.user;
+  document.getElementById("userState").textContent = user?.kind === "account" ? user.email : "زائر";
+  document.getElementById("authOpen").hidden = Boolean(user?.kind === "account");
+  document.getElementById("logoutBtn").hidden = !user;
+  document.getElementById("adminOpen").hidden = !user?.is_admin;
+}
+
+async function loadCurrentUser() {
+  try {
+    const response = await fetch(`${API_BASE}/api/auth/me`);
+    const data = await response.json();
+    state.user = data.user;
+  } catch {
+    state.user = null;
+  }
+  updateUserControls();
+}
+
+function openOverlay(id) {
+  const overlay = document.getElementById(id);
+  overlay.classList.add("open");
+  overlay.setAttribute("aria-hidden", "false");
+}
+
+function closeOverlay(id) {
+  const overlay = document.getElementById(id);
+  overlay.classList.remove("open");
+  overlay.setAttribute("aria-hidden", "true");
+}
+
+function setAuthMode(mode) {
+  state.authMode = mode;
+  document.querySelectorAll("[data-auth-mode]").forEach(button => {
+    button.classList.toggle("active", button.dataset.authMode === mode);
+  });
+  document.getElementById("authSubmit").textContent = mode === "register" ? "إنشاء الحساب" : "تسجيل الدخول";
+  document.getElementById("authPassword").autocomplete = mode === "register" ? "new-password" : "current-password";
+  document.getElementById("authError").textContent = "";
+}
+
+async function submitAuth(event) {
+  event.preventDefault();
+  const error = document.getElementById("authError");
+  error.textContent = "";
+  const payload = { email: document.getElementById("authEmail").value, password: document.getElementById("authPassword").value };
+  try {
+    const response = await fetch(`${API_BASE}/api/auth/${state.authMode}`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || "تعذر إتمام العملية");
+    state.user = data.user;
+    updateUserControls();
+    closeOverlay("authOverlay");
+  } catch (err) {
+    error.textContent = err.message || "تعذر إتمام العملية";
+  }
+}
+
+async function continueAsGuest() {
+  const response = await fetch(`${API_BASE}/api/auth/guest`, { method: "POST" });
+  const data = await response.json();
+  if (response.ok) {
+    state.user = data.user;
+    updateUserControls();
+    closeOverlay("authOverlay");
+  }
+}
+
+async function logout() {
+  await fetch(`${API_BASE}/api/auth/logout`, { method: "POST" });
+  state.user = null;
+  updateUserControls();
+}
+
+function recordVisit() {
+  fetch(`${API_BASE}/api/telemetry/visit`, { method: "POST" }).catch(() => {});
+}
+
+async function openAdminDashboard() {
+  openOverlay("adminOverlay");
+  const target = document.getElementById("adminMetrics");
+  target.textContent = "جارٍ تحميل الإحصاءات…";
+  try {
+    const response = await fetch(`${API_BASE}/api/admin/metrics`);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || "تعذر تحميل الإحصاءات");
+    const days = (data.daily || []).map(item => `${escapeHtml(item.visit_day)}: <strong>${Number(item.visits)}</strong>`).join(" · ") || "لا توجد زيارات مسجلة بعد";
+    target.innerHTML = `<div class="metric-card"><strong>${Number(data.total_visits)}</strong><span>إجمالي الزيارات اليومية المسجلة</span></div>
+      <div class="metric-card"><strong>${Number(data.unique_visitors)}</strong><span>زوار فريدون تقريبياً</span></div>
+      <div class="metric-card"><strong>${Number(data.accounts)}</strong><span>حسابات مستخدمين</span></div>
+      <div class="metric-days">آخر 7 أيام: ${days}</div>`;
+  } catch (err) {
+    target.textContent = err.message || "تعذر تحميل الإحصاءات";
+  }
 }
 
 async function loadSectors() {
@@ -903,7 +1005,7 @@ async function openStockDetail(row) {
     </div>
     <section class="detail-section active" data-detail-section="overview">
       <div class="panel"><strong>🧭 التصنيف الفني والمخاطر</strong><p class="mixed-direction-text" dir="rtl">${formatMixedDirectionText(row["سبب التصنيف"] || "لا يوجد تفسير متاح.")}</p></div>
-      <div class="panel"><strong>☪️ الفلتر الشرعي الأولي — ليس اعتمادًا أو فتوى</strong><p>${escapeHtml(row["الفلتر الشرعي (أولي)"] || "غير محسوم")}</p><p class="mixed-direction-text" dir="rtl">${formatMixedDirectionText(row["شرح الفلتر الشرعي"] || "يستلزم فحصًا ماليًا ومراجعة مختصة.")}</p></div>
+      <div class="panel"><strong>☪️ حالة EGX33 Shariah</strong><p>${escapeHtml(row["حالة EGX33 Shariah"] || "غير متاح")}</p><p class="mixed-direction-text" dir="rtl">${formatMixedDirectionText(row["شرح حالة EGX33 Shariah"] || "تعرض عضوية المؤشر فقط وليست فتوى أو فحصاً شرعياً مستقلاً.")}</p></div>
     </section>
     <section class="detail-section" data-detail-section="strategy">
       <div class="panel"><strong>🎯 استراتيجية الدخول والخروج</strong><p class="mixed-direction-text" dir="rtl">${formatMixedDirectionText(row["استراتيجية الدخول والخروج"] || "—")}</p></div>
@@ -1069,6 +1171,14 @@ async function exportExcel() {
 }
 
 function bindEvents() {
+  document.getElementById("authOpen").addEventListener("click", () => openOverlay("authOverlay"));
+  document.getElementById("authClose").addEventListener("click", () => closeOverlay("authOverlay"));
+  document.getElementById("adminClose").addEventListener("click", () => closeOverlay("adminOverlay"));
+  document.getElementById("logoutBtn").addEventListener("click", logout);
+  document.getElementById("adminOpen").addEventListener("click", openAdminDashboard);
+  document.getElementById("authForm").addEventListener("submit", submitAuth);
+  document.getElementById("guestBtn").addEventListener("click", continueAsGuest);
+  document.querySelectorAll("[data-auth-mode]").forEach(button => button.addEventListener("click", () => setAuthMode(button.dataset.authMode)));
   document.getElementById("scanBtn").addEventListener("click", runScan);
   document.getElementById("exportBtn").addEventListener("click", exportExcel);
   document.getElementById("searchBox").addEventListener("input", scheduleSearch);

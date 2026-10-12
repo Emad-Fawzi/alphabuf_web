@@ -9,6 +9,7 @@ import numpy as np
 from utils.formatting import fmt_thousands, bidi_safe
 from data_sources.yfinance_source import get_stock_data
 from data_sources.mubasher_source import fetch_mubasher_snapshot
+from config import EGX33_SHARIAH_TICKERS
 
 
 def _classify_stock_profile(close_price, sma_20, sma_50, sma_200, daily_volatility):
@@ -49,17 +50,18 @@ def _classify_stock_profile(close_price, sma_20, sma_50, sma_200, daily_volatili
     return profile, risk, rationale
 
 
-def _screen_sharia_by_activity(sector):
-    """Preliminary business-activity screen only; accounting ratios and Sharia review are not available."""
-    if sector in {"تبغ", "مشروبات كحولية"}:
-        return "غير متوافق مبدئيًا — نشاط محظور", "تنبيه نشاط أولي فقط، وليس فتوى أو تدقيقًا شرعيًا معتمدًا."
-    if sector == "البنوك":
-        return "غير محسوم — نشاط مصرفي مختلط", "يضم القطاع بنوكًا مختلفة؛ يلزم فحص نشاط البنك نفسه ومعياره الشرعي ونسبه المالية."
-    if sector == "التأمين":
-        return "مراجعة شرعية لازمة — التأمين", "تصنيف النشاط وحده لا يحسم نوع التأمين أو آلية الاستثمار."
-    if sector in {"الخدمات المالية غير المصرفية والصناديق", "استثمار وتمويل وائتمان", "الأنشطة المالية المتنوعة", "وساطة وإدارة أصول"}:
-        return "غير محسوم — نشاط مالي مختلط", "يلزم فحص مصادر الإيراد والديون والنسب المالية وفق معيار شرعي محدد."
-    return "غير محسوم — النسب المالية غير مفحوصة", "لم تُفحص القوائم المالية أو الديون أو النقد/الفوائد أو الإيرادات غير المتوافقة؛ هذا ليس اعتمادًا شرعيًا."
+def _egx33_sharia_status(ticker_symbol):
+    """يعرض عضوية مؤشر EGX33 Shariah، ولا يستنتج حكماً شرعياً من قطاع الشركة."""
+    ticker = ticker_symbol.removesuffix(".CA")
+    if ticker in EGX33_SHARIAH_TICKERS:
+        return (
+            "✅ مُدرج في EGX33 Shariah",
+            "السهم ضمن مكونات مؤشر EGX33 Shariah في القائمة المرجعية الحالية. العضوية تُراجع دورياً، وليست فتوى فردية أو ضماناً دائماً.",
+        )
+    return (
+        "— غير مدرج في EGX33 Shariah",
+        "عدم الإدراج في المؤشر لا يعني حكماً شرعياً على السهم؛ يعرض التطبيق عضوية المؤشر فقط ولا يجري فحصاً مالياً مستقلاً.",
+    )
 
 
 def _estimate_daily_move_ranges(df, close_price, timeframe_cfg):
@@ -258,7 +260,7 @@ def analyze_stock(sector, item, timeframe_cfg, min_daily_turnover, rate_limit_de
         stock_type, risk_level, profile_reason = _classify_stock_profile(
             close_price, sma_20, sma_50, sma_200, daily_ret_std
         )
-        sharia_status, sharia_reason = _screen_sharia_by_activity(sector)
+        sharia_status, sharia_reason = _egx33_sharia_status(ticker_symbol)
         estimated_moves = _estimate_daily_move_ranges(df, close_price, timeframe_cfg)
         historical_returns = _historical_price_returns(df, timeframe_cfg)
 
@@ -412,8 +414,8 @@ def analyze_stock(sector, item, timeframe_cfg, min_daily_turnover, rate_limit_de
             "نوع السهم": stock_type,
             "مستوى المخاطرة": risk_level,
             "سبب التصنيف": profile_reason,
-            "الفلتر الشرعي (أولي)": sharia_status,
-            "شرح الفلتر الشرعي": sharia_reason,
+            "حالة EGX33 Shariah": sharia_status,
+            "شرح حالة EGX33 Shariah": sharia_reason,
             "السعر": round(float(close_price), 2),
             "مصدر السعر": price_source,
             "التغير %": round(float(change_pct), 2),
@@ -451,4 +453,3 @@ def analyze_stock(sector, item, timeframe_cfg, min_daily_turnover, rate_limit_de
     except Exception as e:
         return None, {"القطاع": sector, "اسم الشركة": arabic_name, "الرمز": ticker_symbol,
                        "سبب الاستبعاد": f"خطأ في حساب المؤشرات ({str(e)})"}
-

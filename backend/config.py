@@ -485,6 +485,15 @@ APSW EASB ROTO MOED TYCN SPMD RAKT KWIN EEII AREH CCRS FCMD EPCO GRCA GIHD MMAT 
 ELNA ELWA DGTZ DCCC NEDA EPPK GMCI EOSB CPME COPR
 """.split())
 
+# مكونات EGX33 Shariah بعد مراجعة سبتمبر 2026. يوجد 33 مُصدِراً و34 رمزاً لأن بنك
+# فيصل الإسلامي له فئتان متداولتان (FAIT وFAITA). هذه حالة عضوية في المؤشر فقط، وليست
+# فتوى مستقلة أو بديلاً عن مراجعة المستثمر للقوائم وأحكامه الشرعية.
+EGX33_SHARIAH_TICKERS = frozenset("""
+ACGC ADIB AMOC ARCC ATQA CIRA EFID EFIH EGAL EGAS ETEL ETRS FAIT FAITA ICFC IFAP
+ISPH JUFO LCSW MASR MCQE MPCO MTIE OCDI OLFI ORAS ORHD ORWE PHDC RACC RMDA SAUD
+SKPC TMGH
+""".split())
+
 # رموز نشطة ظهرت في المرجع أعلاه ولم تكن ضمن القائمة المحلية السابقة.
 _NEW_ACTIVE_EGX_STOCKS = [
     ("VLMR", "فالمور القابضة للاستثمار (السهم العادي)"),
