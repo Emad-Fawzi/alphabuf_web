@@ -26,6 +26,7 @@ let state = {
   columnOrders: loadColumnOrders(),
   user: null,
   authMode: "login",
+  favorites: new Map(),
 };
 
 function loadColumnOrders() {
@@ -145,6 +146,83 @@ async function loadCurrentUser() {
     state.user = null;
   }
   updateUserControls();
+  await loadFavorites();
+}
+
+async function loadFavorites() {
+  if (state.user?.kind !== "account") {
+    state.favorites = new Map();
+    renderFavorites();
+    return;
+  }
+  try {
+    const response = await fetch(`${API_BASE}/api/favorites`);
+    const data = await response.json();
+    state.favorites = new Map((data.items || []).map(item => [item.ticker, item]));
+  } catch {
+    state.favorites = new Map();
+  }
+  renderFavorites();
+}
+
+function renderFavorites() {
+  const container = document.getElementById("favoritesList");
+  const count = document.getElementById("favoritesCount");
+  if (!container || !count) return;
+  if (state.user?.kind !== "account") {
+    count.textContent = "حساب مطلوب";
+    container.innerHTML = `<p class="text-tertiary">سجّل دخولك أو أنشئ حساباً لحفظ الأسهم ومتابعتها من أي جهاز.</p><button class="btn btn-ghost" id="favoritesLoginBtn">تسجيل الدخول</button>`;
+    document.getElementById("favoritesLoginBtn")?.addEventListener("click", () => openOverlay("authOverlay"));
+    return;
+  }
+  const items = [...state.favorites.values()];
+  count.textContent = `${items.length} سهم`;
+  if (!items.length) {
+    container.innerHTML = '<p class="text-tertiary">افتح تفاصيل أي سهم من نتائج الفحص ثم اضغط «إضافة إلى المفضلة».</p>';
+    return;
+  }
+  container.innerHTML = items.map(item => {
+    const latest = state.results.find(row => row["الرمز"] === item.ticker);
+    const change = Number(latest?.["التغير %"]);
+    const changeText = Number.isFinite(change) ? `${change > 0 ? "+" : ""}${change.toFixed(2)}%` : "—";
+    const changeClass = change > 0 ? "pct-up" : change < 0 ? "pct-down" : "";
+    return `<article class="favorite-card" data-favorite-ticker="${escapeHtml(item.ticker)}"><div><strong>${escapeHtml(latest?.["اسم الشركة"] || item.name)}</strong><small>${escapeHtml(latest?.["القطاع"] || item.sector)} · <span class="num">${escapeHtml(item.ticker)}</span></small></div><div class="favorite-price"><b class="num">${latest?.["السعر"] ?? "—"}</b><span class="num ${changeClass}">${changeText}</span></div><button type="button" class="top-action" data-remove-favorite="${escapeHtml(item.ticker)}">إزالة</button></article>`;
+  }).join("");
+  container.querySelectorAll("[data-remove-favorite]").forEach(button => button.addEventListener("click", () => toggleFavoriteByTicker(button.dataset.removeFavorite)));
+  container.querySelectorAll("[data-favorite-ticker]").forEach(card => card.addEventListener("click", event => {
+    if (event.target.closest("button")) return;
+    const row = state.results.find(item => item["الرمز"] === card.dataset.favoriteTicker);
+    if (row) openStockDetail(row);
+  }));
+}
+
+async function toggleFavorite(row) {
+  if (state.user?.kind !== "account") {
+    openOverlay("authOverlay");
+    document.getElementById("authError").textContent = "سجّل الدخول لحفظ المفضلات داخل حسابك.";
+    return;
+  }
+  const ticker = row["الرمز"];
+  if (state.favorites.has(ticker)) {
+    await toggleFavoriteByTicker(ticker);
+    return;
+  }
+  const response = await fetch(`${API_BASE}/api/favorites`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ticker, name: row["اسم الشركة"], sector: row["القطاع"] }) });
+  const data = await response.json();
+  if (!response.ok) return;
+  state.favorites.set(data.item.ticker, data.item);
+  renderFavorites();
+  const button = document.getElementById("favoriteToggle");
+  if (button) button.textContent = "★ إزالة من المفضلة";
+}
+
+async function toggleFavoriteByTicker(ticker) {
+  const response = await fetch(`${API_BASE}/api/favorites/${encodeURIComponent(ticker)}`, { method: "DELETE" });
+  if (!response.ok) return;
+  state.favorites.delete(ticker);
+  renderFavorites();
+  const button = document.getElementById("favoriteToggle");
+  if (button) button.textContent = "☆ إضافة إلى المفضلة";
 }
 
 function openOverlay(id) {
@@ -182,6 +260,7 @@ async function submitAuth(event) {
     if (!response.ok) throw new Error(data.detail || "تعذر إتمام العملية");
     state.user = data.user;
     updateUserControls();
+    await loadFavorites();
     closeOverlay("authOverlay");
   } catch (err) {
     error.textContent = err.message || "تعذر إتمام العملية";
@@ -194,6 +273,7 @@ async function continueAsGuest() {
   if (response.ok) {
     state.user = data.user;
     updateUserControls();
+    await loadFavorites();
     closeOverlay("authOverlay");
   }
 }
@@ -202,6 +282,7 @@ async function logout() {
   await fetch(`${API_BASE}/api/auth/logout`, { method: "POST" });
   state.user = null;
   updateUserControls();
+  await loadFavorites();
 }
 
 function recordVisit() {
@@ -373,6 +454,7 @@ function applyScanData(data) {
   renderSectorPerformance(state.results);
   applySearch();
   renderGrowthTable(state.results);
+  renderFavorites();
   renderDroppedTable(state.dropped);
   renderHistory(data.history || []);
   document.getElementById("exportBtn").disabled = state.results.length === 0;
@@ -573,6 +655,7 @@ async function refreshLiveQuotes() {
       renderSectorPerformance(state.results);
       applySearch();
       renderGrowthTable(state.results);
+      renderFavorites();
     }
     updateLiveQuoteStatus(`تحديث تلقائي للأسعار: ${new Date().toLocaleTimeString("ar-EG")}`, "success");
   } catch {
@@ -1008,6 +1091,7 @@ async function openStockDetail(row) {
   overlay.classList.add("open");
   content.innerHTML = `
     <h2 style="margin-top:0;">${escapeHtml(row["اسم الشركة"])} <span class="num" style="color:var(--text-secondary);">(${escapeHtml(row["الرمز"])})</span></h2>
+    <button type="button" class="top-action favorite-detail-button" id="favoriteToggle">${state.favorites.has(row["الرمز"]) ? "★ إزالة من المفضلة" : "☆ إضافة إلى المفضلة"}</button>
     <section class="detail-signal-card">
       <div class="detail-score"><strong>${row["قوة الإشارة"] ?? "—"}</strong><span>قوة الإشارة</span></div>
       <div><strong>${escapeHtml(row["قرار السوينغ"] || "انتظر")}</strong><p>${escapeHtml(row["نوع السهم"] || "غير محدد")} · مخاطرة ${escapeHtml(row["مستوى المخاطرة"] || "غير محددة")}</p></div>
@@ -1028,6 +1112,8 @@ async function openStockDetail(row) {
     </section>
     <section class="detail-section" data-detail-section="news"><div class="panel" id="newsPanel"><span class="loading-spinner"></span> جاري جلب الأخبار والإعلانات…</div></section>
   `;
+
+  content.querySelector("#favoriteToggle")?.addEventListener("click", () => toggleFavorite(row));
 
   content.querySelectorAll("[data-detail-tab]").forEach(button => {
     button.addEventListener("click", () => {
@@ -1160,6 +1246,7 @@ function switchTab(tabName) {
   document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b.dataset.tab === tabName));
   document.querySelectorAll(".tab-content").forEach(c => c.style.display = "none");
   document.getElementById(`tab-${tabName}`).style.display = "block";
+  if (tabName === "favorites") renderFavorites();
 }
 
 async function exportExcel() {

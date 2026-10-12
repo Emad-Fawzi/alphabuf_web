@@ -41,6 +41,11 @@ def _initialize():
           visitor_token TEXT NOT NULL, visit_day TEXT NOT NULL, first_seen TEXT NOT NULL,
           PRIMARY KEY(visitor_token, visit_day)
         );
+        CREATE TABLE IF NOT EXISTS user_favorites (
+          user_id INTEGER NOT NULL, ticker TEXT NOT NULL, name TEXT NOT NULL,
+          sector TEXT NOT NULL, created_at TEXT NOT NULL,
+          PRIMARY KEY(user_id, ticker), FOREIGN KEY(user_id) REFERENCES users(id)
+        );
         """)
 
 
@@ -113,6 +118,13 @@ def _require_admin(request):
     return session
 
 
+def _require_account(request):
+    session = _session_user(request)
+    if not session or session["is_guest"] or not session["user_id"]:
+        raise HTTPException(status_code=401, detail="سجّل الدخول أولاً لحفظ المفضلات في حسابك")
+    return session
+
+
 class Credentials(BaseModel):
     email: str = Field(min_length=5, max_length=254)
     password: str = Field(min_length=10, max_length=128)
@@ -123,6 +135,20 @@ class Credentials(BaseModel):
         value = value.strip().lower()
         if value.count("@") != 1 or value.startswith("@") or value.endswith("@"):
             raise ValueError("البريد الإلكتروني غير صالح")
+        return value
+
+
+class FavoritePayload(BaseModel):
+    ticker: str = Field(min_length=1, max_length=20)
+    name: str = Field(min_length=1, max_length=160)
+    sector: str = Field(min_length=1, max_length=100)
+
+    @field_validator("ticker")
+    @classmethod
+    def validate_ticker(cls, value):
+        value = value.strip().upper()
+        if not all(char.isalnum() or char in ".-" for char in value):
+            raise ValueError("رمز السهم غير صالح")
         return value
 
 
@@ -201,6 +227,33 @@ def record_visit(request: Request, response: Response):
                      (visitor, now.date().isoformat(), now.isoformat()))
     response.set_cookie(_VISITOR_COOKIE, visitor, max_age=365 * 86400, httponly=True, samesite="lax",
                         secure=os.getenv("COOKIE_SECURE", "").lower() == "true")
+    return {"ok": True}
+
+
+@router.get("/api/favorites")
+def list_favorites(request: Request):
+    session = _require_account(request)
+    with _connection() as conn:
+        items = conn.execute("SELECT ticker, name, sector, created_at FROM user_favorites WHERE user_id = ? ORDER BY created_at DESC",
+                             (session["user_id"],)).fetchall()
+    return {"items": [dict(item) for item in items]}
+
+
+@router.post("/api/favorites")
+def add_favorite(payload: FavoritePayload, request: Request):
+    session = _require_account(request)
+    with _connection() as conn:
+        conn.execute("INSERT OR REPLACE INTO user_favorites(user_id, ticker, name, sector, created_at) VALUES (?, ?, ?, ?, ?)",
+                     (session["user_id"], payload.ticker, payload.name.strip(), payload.sector.strip(), _now().isoformat()))
+    return {"item": {"ticker": payload.ticker, "name": payload.name.strip(), "sector": payload.sector.strip()}}
+
+
+@router.delete("/api/favorites/{ticker}")
+def remove_favorite(ticker: str, request: Request):
+    session = _require_account(request)
+    ticker = ticker.strip().upper()
+    with _connection() as conn:
+        conn.execute("DELETE FROM user_favorites WHERE user_id = ? AND ticker = ?", (session["user_id"], ticker))
     return {"ok": True}
 
 
