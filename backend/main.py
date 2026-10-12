@@ -19,6 +19,7 @@ import json
 import logging
 import math
 import numbers
+import os
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -28,7 +29,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 import config
 from analysis.stock_analyzer import analyze_stock
@@ -44,12 +45,16 @@ import io
 
 app = FastAPI(title="AlphaBuf API", description="محرك فحص البورصة المصرية")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# الواجهة تُخدّم من نفس التطبيق، لذلك لا نحتاج CORS افتراضياً. فعّله صراحةً فقط لو
+# كانت هناك واجهة مستقلة على دومين آخر؛ هذا يمنع المواقع العشوائية من استهلاك فحص السوق.
+_cors_origins = [origin.strip() for origin in os.getenv("CORS_ALLOWED_ORIGINS", "").split(",") if origin.strip()]
+if _cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_cors_origins,
+        allow_methods=["GET", "POST"],
+        allow_headers=["Content-Type"],
+    )
 
 app.include_router(routers.meta.router)
 app.include_router(routers.macro.router)
@@ -128,11 +133,30 @@ _scan_cache.update(_load_scan_cache())
 
 
 class ScanRequest(BaseModel):
-    sectors: list[str] = []
+    """إعدادات فحص موثوقة قبل أن تبدأ أي طلبات خارجية مكلفة."""
+    model_config = ConfigDict(allow_inf_nan=False)
+
+    sectors: list[str] = Field(default_factory=list)
     timeframe: str = "يومي"
-    min_daily_turnover: float = 0
+    min_daily_turnover: float = Field(default=0, ge=0)
     use_investing_primary: bool = False
     force_refresh: bool = False
+
+    @field_validator("timeframe")
+    @classmethod
+    def validate_timeframe(cls, value):
+        if value not in config.TIMEFRAME_CONFIG:
+            raise ValueError("الإطار الزمني غير مدعوم")
+        return value
+
+    @field_validator("sectors")
+    @classmethod
+    def validate_sectors(cls, values):
+        known_sectors = set(config.EGX_MARKET_BY_SECTOR)
+        unknown_sectors = sorted(set(values) - known_sectors)
+        if unknown_sectors:
+            raise ValueError(f"قطاعات غير معروفة: {', '.join(unknown_sectors)}")
+        return sorted(set(values))
 
 
 def _default_scan_request():
@@ -603,4 +627,3 @@ async def scan_excel(req: ScanRequest):
 
 _frontend_dir = str(Path(__file__).resolve().parent.parent / "frontend")
 app.mount("/", StaticFiles(directory=_frontend_dir, html=True), name="frontend")
-

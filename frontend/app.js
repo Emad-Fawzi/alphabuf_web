@@ -15,6 +15,7 @@ let state = {
   sortDir: "desc",
   autoRefreshTimer: null,
   progressPollTimer: null,
+  searchTimer: null,
   lastCache: null,
   lastScanConfig: null,
   categoryFilters: {},
@@ -39,6 +40,12 @@ function saveColumnOrder(tableId, columns) {
   } catch {
     // Reordering remains available for this page when browser storage is unavailable.
   }
+}
+
+function scanConfigsMatch(first, second) {
+  if (!first || !second) return false;
+  return JSON.stringify({ ...first, sectors: [...(first.sectors || [])].sort() })
+    === JSON.stringify({ ...second, sectors: [...(second.sectors || [])].sort() });
 }
 
 const RESULT_COLUMNS = [
@@ -250,8 +257,7 @@ function updateScanButtonState() {
   const button = document.getElementById("scanBtn");
   const cachedConfig = state.lastScanConfig;
   const currentConfig = getCurrentScanConfig();
-  const matches = cachedConfig
-    && JSON.stringify({ ...cachedConfig, sectors: [...(cachedConfig.sectors || [])].sort() }) === JSON.stringify(currentConfig);
+  const matches = scanConfigsMatch(cachedConfig, currentConfig);
   const hasFreshResult = matches && state.lastCache?.expires_at && Date.parse(state.lastCache.expires_at) > Date.now();
   button.textContent = hasFreshResult
     ? `✅ أحدث فحص ${currentConfig.timeframe} متاح — عرض أو إعادة الفحص`
@@ -263,9 +269,7 @@ async function runScan(options = {}) {
   const automatic = options.automatic === true;
   let forceRefresh = options.forceRefresh === true;
   const currentConfig = getCurrentScanConfig();
-  const currentIsCachedConfig = state.lastScanConfig
-    && JSON.stringify({ ...state.lastScanConfig, sectors: [...(state.lastScanConfig.sectors || [])].sort() })
-      === JSON.stringify(currentConfig);
+  const currentIsCachedConfig = scanConfigsMatch(state.lastScanConfig, currentConfig);
   if (!automatic && currentIsCachedConfig && state.lastCache?.expires_at && Date.parse(state.lastCache.expires_at) > Date.now()) {
     const expiresLabel = formatCacheExpiry(state.lastCache.expires_at);
     const refreshConfirmed = window.confirm(`الفحص موجود بالفعل وهو أحدث بيانات لهذا الإطار الزمني.\n${expiresLabel}\n\nهل تريد إعادة الفحص الآن؟\nموافق: إعادة الفحص الآن\nإلغاء: عرض أحدث نتيجة محفوظة`);
@@ -356,14 +360,24 @@ function formatCacheExpiry(value) {
 
 function scheduleAutoRefresh(cache) {
   clearTimeout(state.autoRefreshTimer);
+  const scheduledConfig = state.lastScanConfig && {
+    ...state.lastScanConfig,
+    sectors: [...(state.lastScanConfig.sectors || [])],
+  };
+  const refreshIfStillRelevant = () => {
+    // لا تبدأ فحصاً جديداً لإعدادات غيّرها المستخدم منذ تحميل النتيجة.
+    if (scheduledConfig && scanConfigsMatch(getCurrentScanConfig(), scheduledConfig)) {
+      runScan({ automatic: true });
+    }
+  };
   if (cache.status === "refreshing") {
-    state.autoRefreshTimer = setTimeout(() => runScan({ automatic: true }), 10000);
+    state.autoRefreshTimer = setTimeout(refreshIfStillRelevant, 10000);
     return;
   }
   const expiresAt = Date.parse(cache.expires_at || "");
   if (Number.isNaN(expiresAt)) return;
   const delay = Math.max(1000, expiresAt - Date.now());
-  state.autoRefreshTimer = setTimeout(() => runScan({ automatic: true }), Math.min(delay, 2147480000));
+  state.autoRefreshTimer = setTimeout(refreshIfStillRelevant, Math.min(delay, 2147480000));
 }
 
 function renderStats(data) {
@@ -570,15 +584,12 @@ function renderTable(rows, columns, headEl, bodyEl, emptyEl, onRowClick) {
     </tr>
   `).join("");
 
-  if (onRowClick) {
-    bodyEl.querySelectorAll("tr").forEach(tr => {
-      tr.addEventListener("click", () => {
-        const ticker = tr.dataset.ticker;
-        const row = rows.find(r => r["الرمز"] === ticker);
-        onRowClick(row);
-      });
-    });
-  }
+  // مستمع واحد للجدول بدلاً من مستمع لكل صف في كل إعادة رسم.
+  bodyEl.onclick = onRowClick ? event => {
+    const tr = event.target.closest("tr[data-ticker]");
+    if (!tr || !bodyEl.contains(tr)) return;
+    onRowClick(rows.find(row => row["الرمز"] === tr.dataset.ticker));
+  } : null;
 
   let draggedColumn = null;
   headEl.querySelectorAll("th").forEach(th => {
@@ -636,7 +647,7 @@ function renderTable(rows, columns, headEl, bodyEl, emptyEl, onRowClick) {
     th.querySelectorAll("input,select").forEach(control => {
       control.addEventListener("click", event => event.stopPropagation());
       control.addEventListener("dragstart", event => event.preventDefault());
-      control.addEventListener(control.tagName === "SELECT" ? "change" : "input", applySearch);
+      control.addEventListener(control.tagName === "SELECT" ? "change" : "input", scheduleSearch);
     });
   });
 }
@@ -699,10 +710,10 @@ function renderDroppedTable(rows) {
   empty.style.display = "none";
   body.innerHTML = rows.map(r => `
     <tr>
-      <td>${r["القطاع"] || ""}</td>
-      <td>${r["اسم الشركة"] || ""}</td>
-      <td class="num">${r["الرمز"] || ""}</td>
-      <td>${r["سبب الاستبعاد"] || ""}</td>
+      <td>${escapeHtml(r["القطاع"] || "")}</td>
+      <td>${escapeHtml(r["اسم الشركة"] || "")}</td>
+      <td class="num">${escapeHtml(r["الرمز"] || "")}</td>
+      <td>${escapeHtml(r["سبب الاستبعاد"] || "")}</td>
     </tr>
   `).join("");
 }
@@ -772,6 +783,11 @@ function applySearch() {
       }
     }
   }
+}
+
+function scheduleSearch() {
+  clearTimeout(state.searchTimer);
+  state.searchTimer = setTimeout(applySearch, 180);
 }
 
 async function openStockDetail(row) {
@@ -957,7 +973,7 @@ async function exportExcel() {
 function bindEvents() {
   document.getElementById("scanBtn").addEventListener("click", runScan);
   document.getElementById("exportBtn").addEventListener("click", exportExcel);
-  document.getElementById("searchBox").addEventListener("input", applySearch);
+  document.getElementById("searchBox").addEventListener("input", scheduleSearch);
   document.getElementById("resetFiltersBtn").addEventListener("click", () => {
     state.columnFilters = {};
     document.getElementById("searchBox").value = "";

@@ -177,7 +177,20 @@ select:focus, input:focus { outline: none; border-color: var(--accent); }
 }
 .btn-ghost:hover { border-color: var(--accent); color: var(--accent); background: transparent; }
 
-.main-area { grid-area: main; min-width: 0; padding: var(--space-5); }
+.main-area { grid-area: main; min-width: 0; padding: var(--space-5); max-width: 1800px; width: 100%; }
+
+.workspace-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: var(--space-5);
+  padding: 0 var(--space-1) var(--space-5);
+}
+.workspace-header h1 { margin: 0; font-size: clamp(24px, 2.5vw, 34px); letter-spacing: -0.03em; }
+.workspace-header p:not(.eyebrow) { margin: var(--space-1) 0 0; color: var(--text-secondary); }
+.eyebrow { margin: 0 0 var(--space-1); color: var(--accent); font: 600 11px var(--font-mono); letter-spacing: .11em; direction: ltr; }
+.workspace-header-status { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--text-secondary); font-size: 12px; white-space: nowrap; }
+.workspace-header-status span { width: 8px; height: 8px; border-radius: 50%; background: var(--market-up); box-shadow: 0 0 0 4px var(--market-up-bg); }
 
 .scan-status {
   display: none;
@@ -231,7 +244,7 @@ select:focus, input:focus { outline: none; border-color: var(--accent); }
   margin-bottom: var(--space-4);
 }
 
-.stat-row { display: flex; gap: var(--space-5); margin-bottom: var(--space-4); }
+.stat-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-3); margin-bottom: var(--space-4); }
 .stat-box {
   flex: 1;
   background: var(--bg-panel);
@@ -383,4 +396,6 @@ tbody tr:hover { background: var(--bg-panel-raised); }
 @media (max-width: 900px) {
   body { grid-template-columns: 1fr; grid-template-areas: "pulse" "main" "rail"; }
   .control-rail { border-left: none; border-top: 1px solid var(--border-hairline); }
+  .workspace-header { align-items: start; flex-direction: column; gap: var(--space-2); }
+  .stat-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
