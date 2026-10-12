@@ -420,9 +420,10 @@ _SECTOR_RECLASSIFICATIONS = {
     "نسيج وملابس": ["DSCW", "ACGC", "KABO", "SPIN", "GTWL", "APSW", "CFGH", "ORWE", "NCGC"],
     "سيارات ومعدات نقل": ["AUTO", "GBCO"],
     "طاقة وخدمات بترولية": ["AMOC", "TAQA", "MOIL", "KORA", "EGAS", "NDRL"],
-    "نقل وشحن ولوجستيات": ["ALCN", "UASG", "ETRS", "DCCC", "POCO"],
+    # CSAG وكالة ملاحة وشحن؛ وضعها ضمن التكنولوجيا كان يخلط مقارنة القطاع تماماً.
+    "نقل وشحن ولوجستيات": ["ALCN", "UASG", "ETRS", "DCCC", "POCO", "CSAG"],
     "تصنيع ومعدات كهربائية": ["SWDY", "ELEC", "EEII", "ARVA", "EBDP", "INEE", "INEG", "MBEN", "MRCO", "NASR", "ACRO"],
-    "تكنولوجيا وخدمات أعمال": ["RAYA", "RACC", "MTIE", "DGTZ", "VERT", "ESAC", "ITSY", "PTCC", "XPIN", "AMPI", "CSAG"],
+    "تكنولوجيا وخدمات أعمال": ["RAYA", "RACC", "MTIE", "DGTZ", "VERT", "ESAC", "ITSY", "PTCC", "XPIN", "AMPI"],
     "اتصالات وإعلام": ["OTMT"],
     "عقارات وتطوير عمراني": [
         "TMGH", "PHDC", "OCDI", "MNHD", "HELI", "EMFD", "ORHD", "PRDC", "UNIT", "ELSH", "ARAB",
@@ -463,7 +464,7 @@ EGX_MARKET_BY_SECTOR = {
     **{sector: companies for sector, companies in _reclassified_sectors.items() if companies},
 }
 
-# مرجع النطاق النشط في صفحة Stock Analysis لقائمة EGX، تمت مراجعته في 2026-10-05.
+# مرجع النطاق النشط في صفحة Stock Analysis لقائمة EGX، تمت مراجعته في 2026-10-12.
 # الصفحة تصف القائمة بأنها أسهم متداولة بنشاط وتحدّثها يومياً؛ لذلك نستبعد هنا الرموز
 # التي بقيت في القوائم القديمة لكنها لم تعد ضمن نطاق التداول النشط. إعادة المراجعة الدورية
 # ضرورية لأن الإدراجات والإيقافات تتغير. هذا لا يغني عن قائمة EGX الرسمية عند تحديث الملف.
@@ -493,11 +494,21 @@ _NEW_ACTIVE_EGX_STOCKS = [
     ("FCMD", "الدولية للصناعات الطبية"),
     ("TWSA", "توسع للتخصيم"),
 ]
+# قيد مؤقت مؤكد من EGX، لكنه لم يبدأ التداول بعد؛ لا يدخل الفحص حتى تظهر له
+# بيانات سعرية قابلة للتحليل في المصدر اليومي. نحفظه هنا حتى لا يضيع عند المراجعة القادمة.
+_PENDING_EGX_LISTINGS = {
+    "HALN": {
+        "ticker": "HALN.CA",
+        "name": "إم إن تي تيك القابضة للاستثمارات المالية (حالاً)",
+        "sector": "خدمات مالية غير مصرفية",
+        "status": "قيد مؤقت — لم يبدأ التداول",
+    },
+}
 for _ticker, _name in _NEW_ACTIVE_EGX_STOCKS:
     if _ticker == "VLMR" or _ticker == "TWSA":
         _sector = "استثمار وتمويل وائتمان"
     elif _ticker == "SCTS":
-        _sector = "تكنولوجيا وخدمات أعمال"
+        _sector = "التعليم"
     elif _ticker == "FCMD":
         _sector = "مستلزمات وأجهزة طبية"
     else:
@@ -512,6 +523,23 @@ EGX_MARKET_BY_SECTOR = {
     for _sector, _items in EGX_MARKET_BY_SECTOR.items()
     if any(item["ticker"].removesuffix(".CA") in _ACTIVE_EGX_TICKERS for item in _items)
 }
+
+
+def _validate_market_universe():
+    """حماية من فقدان أو تكرار الرموز أثناء تحديث التصنيفات يدوياً."""
+    configured = [item["ticker"].removesuffix(".CA")
+                  for companies in EGX_MARKET_BY_SECTOR.values() for item in companies]
+    duplicates = sorted({ticker for ticker in configured if configured.count(ticker) > 1})
+    missing = sorted(_ACTIVE_EGX_TICKERS - set(configured))
+    unexpected = sorted(set(configured) - _ACTIVE_EGX_TICKERS)
+    if duplicates or missing or unexpected:
+        raise RuntimeError(
+            "EGX market universe integrity error: "
+            f"duplicates={duplicates}, missing={missing}, unexpected={unexpected}"
+        )
+
+
+_validate_market_universe()
 
 ISIN_BACKUP_MAP = {
     "ACTF.CA": "EGS7D5P1C019.CA",
