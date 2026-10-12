@@ -1,10 +1,20 @@
 import asyncio
 from fastapi import APIRouter, HTTPException, Query
 from data_sources.mubasher_source import fetch_mubasher_snapshot
+from data_sources.stockanalysis_source import fetch_live_price_snapshot
 from news.news_aggregator import analyze_news_for_stock
 from utils.executor import shared_executor
 
 router = APIRouter(tags=["stocks"])
+
+
+@router.get("/api/market/live-quotes")
+async def live_quotes():
+    """أسعار السوق المختصرة للتحديث التلقائي؛ لا يعيد تشغيل التحليل الفني الكامل."""
+    loop = asyncio.get_event_loop()
+    quotes = await loop.run_in_executor(shared_executor, fetch_live_price_snapshot)
+    return {"quotes": quotes}
+
 
 @router.get("/api/stock/{ticker}/news")
 async def stock_news(ticker: str, company_name: str = Query(...)):

@@ -7,8 +7,7 @@ import re
 import pandas as pd
 from utils.cache import ttl_cache
 
-@ttl_cache(300)
-def fetch_price_verification_snapshot():
+def _fetch_price_snapshot():
     """
     مصدر تحقق إضافي وأسرع تحديثًا من ياهو فاينانس: بيجيب أحدث سعر إقفال ونسبة تغيّر
     لكل أسهم البورصة المصرية بطلب واحد بس من stockanalysis.com (مش طلب لكل سهم لوحده)،
@@ -62,6 +61,18 @@ def fetch_price_verification_snapshot():
         return snapshot
     except Exception:
         return {}
+
+
+@ttl_cache(300)
+def fetch_price_verification_snapshot():
+    """لقطة تحقق للفحص الكامل؛ تخفف الضغط على المصدر أثناء تشغيل التحليل."""
+    return _fetch_price_snapshot()
+
+
+@ttl_cache(45)
+def fetch_live_price_snapshot():
+    """لقطة أسعار خفيفة لتحديث الواجهة تلقائياً، بكاش قصير وتجنّب طلب لكل سهم."""
+    return _fetch_price_snapshot()
 
 
 @ttl_cache(300)
@@ -143,5 +154,4 @@ def fetch_stockanalysis_history(ticker_symbol):
         return result_df
     except Exception:
         return None
-
 

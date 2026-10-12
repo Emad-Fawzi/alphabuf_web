@@ -204,6 +204,9 @@ select:focus, input:focus { outline: none; border-color: var(--accent); }
 .scan-status.visible { display: block; }
 .scan-status.error { color: #f08a78; border-color: var(--market-down); }
 .scan-status.success { color: var(--market-up); border-color: var(--market-up); }
+.live-quote-status { display: block; }
+.live-quote-status[data-tone="success"] { color: var(--market-up); border-color: var(--market-up); }
+.live-quote-status[data-tone="error"] { color: #f08a78; border-color: var(--market-down); }
 .scan-progress-wrap { margin-bottom: var(--space-3); }
 .scan-progress-wrap[hidden] { display: none; }
 .scan-progress-label { display: flex; justify-content: space-between; color: var(--text-secondary); font-size: 12px; margin-bottom: var(--space-1); }

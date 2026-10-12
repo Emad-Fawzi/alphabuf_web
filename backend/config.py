@@ -581,5 +581,6 @@ TIMEFRAME_CONFIG = {
     "4 ساعات":    {"interval": "1h",  "period": "60d",  "resample": "4h"},
     "ساعتين":     {"interval": "1h",  "period": "60d",  "resample": "2h"},
     "ساعة":       {"interval": "1h",  "period": "60d",  "resample": None},
+    "5 دقائق":    {"interval": "5m",  "period": "60d",  "resample": None},
     "ربع ساعة":   {"interval": "15m", "period": "20d",  "resample": None},
 }

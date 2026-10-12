@@ -16,6 +16,8 @@ let state = {
   autoRefreshTimer: null,
   progressPollTimer: null,
   searchTimer: null,
+  liveQuotesTimer: null,
+  liveQuoteRequestInFlight: false,
   lastCache: null,
   lastScanConfig: null,
   categoryFilters: {},
@@ -119,6 +121,7 @@ async function init() {
   await Promise.all([loadSectors(), loadTimeframes(), loadMacroPrices()]);
   bindEvents();
   await initializeLatestScan();
+  startLiveQuotesPolling();
 }
 
 async function loadSectors() {
@@ -264,7 +267,7 @@ function applyScanData(data) {
   state.lastCache = data.cache || null;
   state.lastScanConfig = data.scan_config || null;
   state.sectorHorizons = data.sector_horizons || {};
-  renderStats(data);
+  renderStats();
   renderSectorPerformance(state.results);
   applySearch();
   renderGrowthTable(state.results);
@@ -410,13 +413,13 @@ function scheduleAutoRefresh(cache) {
   state.autoRefreshTimer = setTimeout(refreshIfStillRelevant, Math.min(delay, 2147480000));
 }
 
-function renderStats(data) {
+function renderStats() {
   document.getElementById("statRow").style.display = "flex";
-  document.getElementById("statTotal").textContent = data.total_stocks;
-  document.getElementById("statMatched").textContent = data.results.length;
-  document.getElementById("statExcluded").textContent = data.dropped.length;
-  const avgChange = data.results.length
-    ? (data.results.reduce((s, r) => s + (r["التغير %"] || 0), 0) / data.results.length).toFixed(2)
+  document.getElementById("statTotal").textContent = state.totalStocks;
+  document.getElementById("statMatched").textContent = state.results.length;
+  document.getElementById("statExcluded").textContent = state.dropped.length;
+  const avgChange = state.results.length
+    ? (state.results.reduce((s, r) => s + (Number(r["التغير %"]) || 0), 0) / state.results.length).toFixed(2)
     : "0.00";
   document.getElementById("statAvgChange").textContent = avgChange + "%";
   const summary = document.getElementById("signalSummary");
@@ -426,6 +429,61 @@ function renderStats(data) {
     summary.innerHTML = `<span><strong>${strong}</strong> إشارة قوية</span><span><strong>${balanced}</strong> فرصة متوازنة</span><span>التقييم للتصفية والمقارنة، وليس توصية</span>`;
     summary.hidden = false;
   }
+}
+
+function updateLiveQuoteStatus(message, tone = "") {
+  const element = document.getElementById("liveQuoteStatus");
+  if (!element) return;
+  element.textContent = message;
+  element.dataset.tone = tone;
+}
+
+function scheduleLiveQuotes(delay = 60000) {
+  clearTimeout(state.liveQuotesTimer);
+  state.liveQuotesTimer = setTimeout(refreshLiveQuotes, delay);
+}
+
+async function refreshLiveQuotes() {
+  if (document.hidden) {
+    scheduleLiveQuotes();
+    return;
+  }
+  if (state.liveQuoteRequestInFlight) return;
+  state.liveQuoteRequestInFlight = true;
+  try {
+    const response = await fetch(`${API_BASE}/api/market/live-quotes`, { cache: "no-store" });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || "تعذر تحميل الأسعار");
+    const quotes = data.quotes || {};
+    let updated = false;
+    state.results = state.results.map(row => {
+      const quote = quotes[String(row["الرمز"] || "").toUpperCase()];
+      const price = Number(quote?.price);
+      if (!Number.isFinite(price)) return row;
+      updated = true;
+      const next = { ...row, "السعر": price, "مصدر السعر": "متابعة تلقائية للسوق" };
+      const change = Number(quote.change_pct);
+      if (Number.isFinite(change)) next["التغير %"] = change;
+      return next;
+    });
+    if (updated) {
+      renderStats();
+      renderSectorPerformance(state.results);
+      applySearch();
+      renderGrowthTable(state.results);
+    }
+    updateLiveQuoteStatus(`تحديث تلقائي للأسعار: ${new Date().toLocaleTimeString("ar-EG")}`, "success");
+  } catch {
+    updateLiveQuoteStatus("تعذر التحديث التلقائي للأسعار؛ ستتم إعادة المحاولة", "error");
+  } finally {
+    state.liveQuoteRequestInFlight = false;
+    scheduleLiveQuotes();
+  }
+}
+
+function startLiveQuotesPolling() {
+  clearTimeout(state.liveQuotesTimer);
+  refreshLiveQuotes();
 }
 
 function renderSectorPerformance(rows) {
@@ -505,7 +563,7 @@ function renderHistory(history) {
     const horizons = horizonSummary[sector]?.periods || {};
     const cells = ["ربع سنوي", "نصف سنوي", "سنوي"].map(label => {
       const item = horizons[label];
-      if (!item || item.current_return == null) return "<td>غير متاح — يلزم تاريخ شموع أطول</td>";
+      if (!item || item.current_return == null) return "<td class=\"text-tertiary\">بيانات تاريخية غير مكتملة من المصدر</td>";
       const asOf = item.captured_at ? new Date(item.captured_at).toLocaleDateString("ar-EG") : "من أسعار السهم التاريخية";
       const delta = item.change_points == null ? "لا توجد لقطة مقارنة محفوظة بعد" : `مقارنة باللقطة: ${item.change_points > 0 ? "+" : ""}${item.change_points.toFixed(2)} نقطة`;
       return `<td>${formatPercent(item.current_return)}<small class="horizon-asof">${escapeHtml(asOf)} · ${escapeHtml(delta)}</small></td>`;
@@ -1035,6 +1093,9 @@ function bindEvents() {
   document.getElementById("minTurnover").addEventListener("input", updateScanButtonState);
   document.getElementById("useInvestingPrimary").addEventListener("change", updateScanButtonState);
   document.getElementById("sectorList").addEventListener("change", updateScanButtonState);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) startLiveQuotesPolling();
+  });
 }
 
 init();

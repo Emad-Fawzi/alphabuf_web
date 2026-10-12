@@ -1,7 +1,7 @@
 """
-ياهو فاينانس: المصدر الأساسي لبيانات الإطارات غير اليومية (ساعة/ساعتين/4 ساعات) - مفيش
-مصدر مجاني بديل بيدّي بيانات intraday لسوق مصر - والملاذ الأخير للإطار اليومي بعد
-investing.com وstockanalysis.com.
+ياهو فاينانس: المصدر الأساسي للتاريخ الطويل ولبيانات الإطارات غير اليومية. نستخدم
+stockanalysis للتحقق من السعر اللحظي وكمسار احتياطي فقط، لأنه لا يقدم تاريخاً كافياً
+لعوائد 3/6/12 شهراً أو SMA200.
 """
 import time
 import pandas as pd
@@ -14,17 +14,12 @@ from utils.cache import ttl_cache
 @ttl_cache(300)
 def fetch_raw_history(ticker_symbol, interval, period, company_name=None, use_investing_primary=False):
     """
-    ترتيب المصادر للإطار اليومي (بعد طلب صريح إن ياهو فاينانس يبقى الملاذ الأخير بس،
-    عشان نقلل استبعاد أسهم مصرية نشطة بسبب فجوات بيانات ياهو فاينانس):
+    ترتيب المصادر للإطار اليومي:
     1) investing.com (لو مفعّل من الشريط الجانبي)
-    2) stockanalysis.com (خفيف - طلب واحد بس، مفيش خطر Cloudflare زي investing.com)
-    3) ياهو فاينانس المباشر (الملاذ شبه الأخير)
-    4) ياهو فاينانس بالـ ISIN البديل (آخر محاولة على الإطلاق)
-    ملحوظة أمانة: stockanalysis.com بيدّي صفحة واحدة بس (~2.5 شهر بيانات) بينما ياهو فاينانس
-    عادة بيدّي 120 يوم - يعني السهم اللي كان شغال كويس مع ياهو ممكن ياخد بيانات أقصر شوية
-    لو استخدمنا stockanalysis بدله، وده ممكن يأثر بالسلب على حساب متوسط 50 يوم لو الصفوف
-    قريبة من الحد الأدنى. الإطارات التانية غير اليومي (ساعة/ساعتين/4 ساعات) بتفضل معتمدة على
-    ياهو فاينانس بس لأن مفيش مصدر مجاني بديل بيدّي بيانات intraday لسوق مصر.
+    2) ياهو فاينانس المباشر (التاريخ الطويل للمؤشرات والعوائد)
+    3) ياهو فاينانس بالـ ISIN البديل
+    4) stockanalysis.com كاحتياط أخير يومي؛ صفحته لا تعطي عادة إلا ~50 جلسة.
+    الإطارات غير اليومية تعتمد على ياهو لأنه المصدر المجاني المتاح للشموع داخل اليوم.
     مع كاش لمدة 5 دقائق عشان لو المستخدم بدّل الإطار الزمني ميحصلش تحميل متكرر.
     """
     if interval == "1d":
@@ -32,10 +27,6 @@ def fetch_raw_history(ticker_symbol, interval, period, company_name=None, use_in
             df = fetch_investing_history(ticker_symbol, company_name)
             if df is not None and not df.empty:
                 return df
-
-        df = fetch_stockanalysis_history(ticker_symbol)
-        if df is not None and not df.empty:
-            return df
 
     try:
         stock = yf.Ticker(ticker_symbol)
@@ -54,6 +45,11 @@ def fetch_raw_history(ticker_symbol, interval, period, company_name=None, use_in
                 return df
         except Exception:
             pass
+
+    if interval == "1d":
+        df = fetch_stockanalysis_history(ticker_symbol)
+        if df is not None and not df.empty:
+            return df
 
     return None
 
@@ -79,5 +75,4 @@ def get_stock_data(ticker_symbol, timeframe_cfg, rate_limit_delay=0.0, company_n
             return None
 
     return df
-
 
