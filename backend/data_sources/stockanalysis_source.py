@@ -139,12 +139,12 @@ def fetch_stockanalysis_history(ticker_symbol):
             return None
 
         result_df = pd.DataFrame(rows).set_index("Date").sort_index()
-        # رفعنا الحد الأدنى من 15 لـ 45 صف (الصفحة بتدّي ~50 صف بحد أقصى) عشان متوسط 50 يوم
-        # (SMA50) يتحسب من بيانات حقيقية كافية، مش نافذة مختصرة بتدّي إشارة مضلِّلة (لاحظنا
-        # مشكلة حقيقية مع بعض الأسهم كانت بتدّي إشارة "قاع" غلط بسبب نافذة بيانات قصيرة).
+        # نحتاج 15 جلسة على الأقل لتشغيل RSI/MFI الأساسي. الأسهم الحديثة لا تأخذ تصنيف
+        # اتجاه طويل أو SMA200 من هذه البيانات القصيرة؛ يبقى ذلك واضحاً في النتيجة بدلاً من
+        # استبعاد سهم له سجل تداول صالح (مثل TWSA) لمجرد أن صفحة المصدر تعرض أقل من 45 صفاً.
         # كمان بنتأكد إن آخر تاريخ في البيانات مش قديم أكتر من أسبوع، عشان نرفض أي بيانات
         # قديمة/مخبأة (cached) بالغلط بدل ما نستخدمها وهي مش عاكسة للسعر الحالي فعلياً.
-        if len(result_df) < 45 or result_df["Close"].nunique() <= 1:
+        if len(result_df) < 15 or result_df["Close"].nunique() <= 1:
             return None
         last_date = result_df.index.max()
         now = pd.Timestamp.now(tz=last_date.tz) if last_date.tz is not None else pd.Timestamp.now()
@@ -154,4 +154,3 @@ def fetch_stockanalysis_history(ticker_symbol):
         return result_df
     except Exception:
         return None
-

@@ -120,7 +120,7 @@ def analyze_stock(sector, item, timeframe_cfg, min_daily_turnover, rate_limit_de
 
     if df is None or df.empty:
         return None, {"القطاع": sector, "اسم الشركة": arabic_name, "الرمز": ticker_symbol,
-                       "سبب الاستبعاد": "بيانات فارغة / غير مسجل في ياهو فاينانس"}
+                       "سبب الاستبعاد": "لا تتوفر بيانات سعرية حديثة قابلة للتحليل من المصادر المتاحة (قد يكون السهم موقوفاً أو قليل التداول)"}
 
     if len(df) < 15:
         return None, {"القطاع": sector, "اسم الشركة": arabic_name, "الرمز": ticker_symbol,
@@ -451,5 +451,4 @@ def analyze_stock(sector, item, timeframe_cfg, min_daily_turnover, rate_limit_de
     except Exception as e:
         return None, {"القطاع": sector, "اسم الشركة": arabic_name, "الرمز": ticker_symbol,
                        "سبب الاستبعاد": f"خطأ في حساب المؤشرات ({str(e)})"}
-
 

@@ -11,6 +11,12 @@ from data_sources.investing_source import fetch_investing_history
 from data_sources.stockanalysis_source import fetch_stockanalysis_history
 from utils.cache import ttl_cache
 
+
+def _usable_daily_history(df):
+    """لا نعتبر صفاً واحداً من Yahoo تاريخاً صالحاً؛ نكمل للمصدر الاحتياطي حينها."""
+    return df is not None and not df.empty and len(df) >= 15
+
+
 @ttl_cache(300)
 def fetch_raw_history(ticker_symbol, interval, period, company_name=None, use_investing_primary=False):
     """
@@ -25,13 +31,15 @@ def fetch_raw_history(ticker_symbol, interval, period, company_name=None, use_in
     if interval == "1d":
         if use_investing_primary and company_name:
             df = fetch_investing_history(ticker_symbol, company_name)
-            if df is not None and not df.empty:
+            if _usable_daily_history(df):
                 return df
 
     try:
         stock = yf.Ticker(ticker_symbol)
         df = stock.history(period=period, interval=interval)
-        if df is not None and not df.empty:
+        if interval != "1d" and df is not None and not df.empty:
+            return df
+        if interval == "1d" and _usable_daily_history(df):
             return df
     except Exception:
         pass
@@ -41,7 +49,9 @@ def fetch_raw_history(ticker_symbol, interval, period, company_name=None, use_in
         try:
             stock = yf.Ticker(isin_ticker)
             df = stock.history(period=period, interval=interval)
-            if df is not None and not df.empty:
+            if interval != "1d" and df is not None and not df.empty:
+                return df
+            if interval == "1d" and _usable_daily_history(df):
                 return df
         except Exception:
             pass
@@ -75,4 +85,3 @@ def get_stock_data(ticker_symbol, timeframe_cfg, rate_limit_delay=0.0, company_n
             return None
 
     return df
-
