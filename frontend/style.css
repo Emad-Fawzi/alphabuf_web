@@ -242,9 +242,17 @@ select:focus, input:focus { outline: none; border-color: var(--accent); }
 .table-heading-label { display: flex; align-items: center; gap: 4px; }
 .column-sort { padding: 0; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; white-space: nowrap; }
 .column-filter { display: block; width: 100%; min-width: 84px; margin-top: 6px; padding: 4px 6px; font-size: 11px; }
-.column-filter-multiple { min-height: 64px; }
 .column-filter-range { display: flex; gap: 4px; margin-top: 6px; }
 .column-filter-range input { min-width: 58px; padding: 4px 5px; font-size: 11px; }
+.multi-filter { position: relative; min-width: 96px; margin-top: 6px; }
+.multi-filter-toggle { display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 6px; padding: 4px 6px; border: 1px solid var(--border-hairline); border-radius: var(--radius-sm); background: var(--bg-panel); color: var(--text-secondary); font: inherit; font-size: 11px; cursor: pointer; }
+.multi-filter-toggle:hover, .multi-filter.open .multi-filter-toggle { border-color: var(--accent); color: var(--text-primary); }
+.multi-filter-menu { display: none; position: absolute; z-index: 40; top: calc(100% + 4px); right: 0; width: 220px; max-height: 260px; overflow: auto; padding: 6px; border: 1px solid var(--border-hairline-strong); border-radius: var(--radius-md); background: var(--bg-panel); box-shadow: 0 12px 30px rgba(0, 0, 0, .35); }
+.multi-filter.open .multi-filter-menu { display: block; }
+.multi-filter-clear { width: 100%; margin-bottom: 5px; padding: 4px 6px; border: 0; border-bottom: 1px solid var(--border-hairline); border-radius: 0; background: transparent; color: var(--accent); font: inherit; font-size: 11px; text-align: right; cursor: pointer; }
+.multi-filter-option { display: flex; align-items: center; gap: 7px; padding: 5px 4px; color: var(--text-primary); font-size: 12px; cursor: pointer; }
+.multi-filter-option:hover { background: var(--bg-panel-raised); }
+.multi-filter-option input { width: auto; min-width: 0; margin: 0; accent-color: var(--accent); }
 
 .tabs {
   display: flex;

@@ -936,11 +936,42 @@ function renderTable(rows, columns, headEl, bodyEl, emptyEl, onRowClick) {
       });
       renderTable(sorted, columns, headEl, bodyEl, emptyEl, onRowClick);
     });
-    th.querySelectorAll("input,select").forEach(control => {
+    th.querySelectorAll("input,select,button").forEach(control => {
       control.addEventListener("click", event => event.stopPropagation());
       control.addEventListener("dragstart", event => event.preventDefault());
+    });
+    th.querySelectorAll("input:not([data-filter-mode='multi']),select").forEach(control => {
       control.addEventListener(control.tagName === "SELECT" ? "change" : "input", scheduleSearch);
     });
+
+    const multiFilter = th.querySelector("[data-multi-filter]");
+    if (multiFilter) {
+      const filterKey = multiFilter.dataset.multiFilter;
+      const toggle = multiFilter.querySelector(".multi-filter-toggle");
+      const setExpanded = open => toggle?.setAttribute("aria-expanded", String(open));
+      toggle?.addEventListener("click", event => {
+        event.stopPropagation();
+        const willOpen = !multiFilter.classList.contains("open");
+        document.querySelectorAll(".multi-filter.open").forEach(filter => {
+          filter.classList.remove("open");
+          filter.querySelector(".multi-filter-toggle")?.setAttribute("aria-expanded", "false");
+        });
+        multiFilter.classList.toggle("open", willOpen);
+        setExpanded(willOpen);
+      });
+      multiFilter.querySelectorAll("input[data-filter-mode='multi']").forEach(checkbox => {
+        checkbox.addEventListener("change", () => {
+          state.columnFilters[filterKey] = [...multiFilter.querySelectorAll("input[data-filter-mode='multi']:checked")]
+            .map(input => input.value);
+          applySearch();
+        });
+      });
+      multiFilter.querySelector(".multi-filter-clear")?.addEventListener("click", event => {
+        event.stopPropagation();
+        state.columnFilters[filterKey] = [];
+        applySearch();
+      });
+    }
   });
 }
 
@@ -962,9 +993,14 @@ function renderColumnFilter(key, label, type, rows) {
   if (!values.length) return "";
   const saved = state.columnFilters[key];
   const selectedValues = Array.isArray(saved) ? saved : saved ? [saved] : [];
-  return `<select class="column-filter column-filter-multiple" multiple size="${Math.min(4, values.length)}" data-filter-key="${escapeHtml(key)}" aria-label="فلترة متعددة ${escapeHtml(label)}" title="يمكن اختيار أكثر من قيمة">
-    ${values.map(value => `<option value="${escapeHtml(value)}" ${selectedValues.includes(String(value)) ? "selected" : ""}>${escapeHtml(value)}</option>`).join("")}
-  </select>`;
+  const selectionLabel = selectedValues.length ? `مختار: ${selectedValues.length}` : "الكل";
+  return `<div class="multi-filter" data-multi-filter="${escapeHtml(key)}">
+    <button type="button" class="multi-filter-toggle" aria-expanded="false" aria-label="فلترة ${escapeHtml(label)}">${selectionLabel}<span aria-hidden="true">⌄</span></button>
+    <div class="multi-filter-menu" role="group" aria-label="اختيارات فلتر ${escapeHtml(label)}">
+      <button type="button" class="multi-filter-clear">مسح الاختيار</button>
+      ${values.map(value => `<label class="multi-filter-option"><input type="checkbox" value="${escapeHtml(value)}" data-filter-key="${escapeHtml(key)}" data-filter-mode="multi" ${selectedValues.includes(String(value)) ? "checked" : ""}><span>${escapeHtml(value)}</span></label>`).join("")}
+    </div>
+  </div>`;
 }
 
 function renderResultsTable(rows) {
@@ -1029,6 +1065,11 @@ function applySearch() {
     if (document.activeElement === control) {
       if (control.dataset.filterMode === "text") {
         state.columnFilters[key] = { text: control.value };
+      } else if (control.dataset.filterMode === "multi") {
+        const filter = control.closest("[data-multi-filter]");
+        state.columnFilters[key] = filter
+          ? [...filter.querySelectorAll("input[data-filter-mode='multi']:checked")].map(input => input.value)
+          : [];
       } else if (control.tagName === "SELECT") {
         state.columnFilters[key] = [...control.selectedOptions].map(option => option.value);
       } else {
@@ -1061,6 +1102,14 @@ function applySearch() {
   });
   renderResultsTable(filtered);
   if (activeFilterDetails) {
+    if (activeFilterDetails.filterMode === "multi") {
+      const multiFilter = [...document.querySelectorAll("#resultsHead [data-multi-filter]")]
+        .find(filter => filter.dataset.multiFilter === activeFilterDetails.filterKey);
+      if (multiFilter) {
+        multiFilter.classList.add("open");
+        multiFilter.querySelector(".multi-filter-toggle")?.setAttribute("aria-expanded", "true");
+      }
+    }
     const replacement = [...document.querySelectorAll("#resultsHead [data-filter-key]")].find(control =>
       control.dataset.filterKey === activeFilterDetails.filterKey
       && control.dataset.bound === activeFilterDetails.bound
@@ -1272,6 +1321,13 @@ async function exportExcel() {
 }
 
 function bindEvents() {
+  document.addEventListener("click", event => {
+    if (event.target.closest(".multi-filter")) return;
+    document.querySelectorAll(".multi-filter.open").forEach(filter => {
+      filter.classList.remove("open");
+      filter.querySelector(".multi-filter-toggle")?.setAttribute("aria-expanded", "false");
+    });
+  });
   document.getElementById("authOpen").addEventListener("click", () => openOverlay("authOverlay"));
   document.getElementById("authClose").addEventListener("click", () => closeOverlay("authOverlay"));
   document.getElementById("adminClose").addEventListener("click", () => closeOverlay("adminOverlay"));
