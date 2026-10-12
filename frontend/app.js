@@ -135,6 +135,7 @@ function updateUserControls() {
   document.getElementById("authOpen").hidden = Boolean(user?.kind === "account");
   document.getElementById("logoutBtn").hidden = !user;
   document.getElementById("adminOpen").hidden = !user?.is_admin;
+  document.getElementById("manualNewsRetry").hidden = !user?.is_admin;
 }
 
 async function loadCurrentUser() {
@@ -1247,10 +1248,10 @@ function renderNewsPanel(data) {
   panel.innerHTML = html;
 }
 
-async function loadMacroNews() {
+async function loadMacroNews(force = false) {
   const container = document.getElementById("macroNewsList");
   container.innerHTML = '<span class="loading-spinner"></span> جاري الجلب…';
-  const resp = await fetch(`${API_BASE}/api/macro/news`);
+  const resp = await fetch(`${API_BASE}/api/macro/news${force ? "?force=true" : ""}`);
   const data = await resp.json();
   if (!data.items || data.items.length === 0) {
     container.innerHTML = `<p style="color:var(--text-secondary);">${escapeHtml(data.error || "مفيش أخبار حالياً")}</p>`;
@@ -1267,10 +1268,10 @@ async function loadMacroNews() {
   }).join("");
 }
 
-async function loadFedAnalysis() {
+async function loadFedAnalysis(force = false) {
   const container = document.getElementById("fedNewsList");
   container.innerHTML = '<span class="loading-spinner"></span> جاري الجلب والتحليل…';
-  const resp = await fetch(`${API_BASE}/api/macro/fed-analysis`);
+  const resp = await fetch(`${API_BASE}/api/macro/fed-analysis${force ? "?force=true" : ""}`);
   const data = await resp.json();
   let html = "";
   if (data.news && data.news.length > 0) {
@@ -1356,6 +1357,17 @@ function bindEvents() {
   });
   document.getElementById("macroNewsBtn").addEventListener("click", loadMacroNews);
   document.getElementById("fedNewsBtn").addEventListener("click", loadFedAnalysis);
+  document.getElementById("manualNewsRetryBtn").addEventListener("click", async event => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    button.textContent = "جاري إعادة المحاولة…";
+    try {
+      await Promise.all([loadMacroNews(true), loadFedAnalysis(true)]);
+    } finally {
+      button.disabled = false;
+      button.textContent = "↻ إعادة المحاولة اليدوية";
+    }
+  });
   document.getElementById("timeframeSelect").addEventListener("change", updateScanButtonState);
   document.getElementById("minTurnover").addEventListener("input", updateScanButtonState);
   document.getElementById("useInvestingPrimary").addEventListener("change", updateScanButtonState);

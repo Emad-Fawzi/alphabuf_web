@@ -48,7 +48,7 @@ def fetch_macro_prices():
     return results
 
 
-def fetch_macro_news(query, max_items=5, freshness_days=3):
+def fetch_macro_news(query, max_items=5, freshness_days=3, force=False):
     """
     أخبار عامة عن السوق العالمي/الجيوسياسي (حروب، قرارات اقتصادية كبرى) ومدى تأثيرها على
     البورصة المصرية والعالمية والذهب والفضة والدولار - بنفس آلية Google/Bing News المستخدمة
@@ -101,7 +101,7 @@ def fetch_macro_news(query, max_items=5, freshness_days=3):
     provider_key_base = f"macro_news_{hashlib.md5(query.encode('utf-8')).hexdigest()[:8]}"
     query_with_freshness = f"{query} when:{freshness_days}d"
 
-    if not _provider_recently_failed(f"{provider_key_base}_google"):
+    if force or not _provider_recently_failed(f"{provider_key_base}_google"):
         try:
             q = quote(query_with_freshness)
             url = f"https://news.google.com/rss/search?q={q}&hl=ar&gl=EG&ceid=EG:ar"
@@ -120,7 +120,7 @@ def fetch_macro_news(query, max_items=5, freshness_days=3):
     else:
         errors.append("Google News: تم تخطيه مؤقتاً (فشل قبل كده في آخر 5 دقايق بنفس الجلسة)")
 
-    if not _provider_recently_failed(f"{provider_key_base}_bing"):
+    if force or not _provider_recently_failed(f"{provider_key_base}_bing"):
         try:
             q = quote(query)
             url = f"https://www.bing.com/news/search?q={q}&format=RSS"
@@ -142,7 +142,7 @@ def fetch_macro_news(query, max_items=5, freshness_days=3):
     return [], " | ".join(errors)
 
 
-def fetch_all_macro_news(max_items_per_query=4):
+def fetch_all_macro_news(max_items_per_query=4, force=False):
     """
     بدل استعلام عام واحد غامض بيرجّع أخبار مالية عامة مش بالضرورة حديثة أو مرتبطة، بندوّر
     بعدة استعلامات مستهدفة منفصلة (كل واحد لموضوع محدد) وبعدين ندمج النتايج، نشيل التكرار،
@@ -163,7 +163,7 @@ def fetch_all_macro_news(max_items_per_query=4):
     all_errors = []
     seen_titles = set()
     for q in queries:
-        items, err = fetch_macro_news(q, max_items=max_items_per_query, freshness_days=2)
+        items, err = fetch_macro_news(q, max_items=max_items_per_query, freshness_days=2, force=force)
         if err:
             all_errors.append(err)
         for it in items:
@@ -184,5 +184,4 @@ def fetch_all_macro_news(max_items_per_query=4):
 
     all_items.sort(key=_sort_key, reverse=True)
     return all_items, None
-
 

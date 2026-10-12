@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AlphaBuf — محرك فحص البورصة المصرية</title>
-  <link rel="stylesheet" href="style.css?v=19">
+  <link rel="stylesheet" href="style.css?v=21">
 </head>
 <body>
 
@@ -174,6 +174,13 @@
     </div>
 
     <div class="tab-content" id="tab-macro" style="display: none;">
+      <div class="manual-news-retry" id="manualNewsRetry" hidden>
+        <div>
+          <strong>التحديث اليدوي للطوارئ</strong>
+          <p>استخدمه فقط إذا ظهر فشل في المصادر أو احتجت إعادة المحاولة فورًا؛ يتجاوز فترة التهدئة المؤقتة للمصادر.</p>
+        </div>
+        <button class="btn btn-ghost" id="manualNewsRetryBtn" type="button">↻ إعادة المحاولة اليدوية</button>
+      </div>
       <div class="panel">
         <h3 style="margin-top:0;">🌐 أخبار مؤثرة على الأسواق</h3>
         <button class="btn btn-ghost" id="macroNewsBtn" style="width:auto; padding: var(--space-2) var(--space-4);">تحديث الأخبار</button>
@@ -234,6 +241,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20"></script>
+  <script src="app.js?v=21"></script>
 </body>
 </html>
