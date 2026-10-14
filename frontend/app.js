@@ -18,6 +18,11 @@ let state = {
   searchTimer: null,
   liveQuotesTimer: null,
   liveQuoteRequestInFlight: false,
+  macroNewsTimer: null,
+  macroNewsRequestInFlight: false,
+  stockNewsTimer: null,
+  stockNewsRequestTicker: null,
+  activeStockTicker: null,
   lastCache: null,
   lastScanConfig: null,
   categoryFilters: {},
@@ -305,6 +310,33 @@ async function openAdminDashboard() {
       <div class="metric-days">آخر 7 أيام: ${days}</div>`;
   } catch (err) {
     target.textContent = err.message || "تعذر تحميل الإحصاءات";
+  }
+}
+
+async function downloadAdminBackup() {
+  const button = document.getElementById("adminBackupBtn");
+  const originalLabel = button.textContent;
+  button.disabled = true;
+  button.textContent = "جارٍ تجهيز النسخة…";
+  try {
+    const response = await fetch(`${API_BASE}/api/admin/backup`);
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.detail || "تعذر إنشاء النسخة الاحتياطية");
+    }
+    const disposition = response.headers.get("content-disposition") || "";
+    const filename = disposition.match(/filename=\"?([^\";]+)\"?/)?.[1] || "alphabuf-backup.sqlite3";
+    const url = URL.createObjectURL(await response.blob());
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    alert(error.message || "تعذر تنزيل النسخة الاحتياطية");
+  } finally {
+    button.disabled = false;
+    button.textContent = originalLabel;
   }
 }
 
@@ -1173,15 +1205,51 @@ async function openStockDetail(row) {
     });
   });
 
+  startStockNewsAutoRefresh(row);
+}
+
+const STOCK_NEWS_AUTO_REFRESH_MS = 10 * 60 * 1000;
+
+function closeStockDetail() {
+  document.getElementById("detailOverlay").classList.remove("open");
+  clearInterval(state.stockNewsTimer);
+  state.stockNewsTimer = null;
+  state.activeStockTicker = null;
+}
+
+async function refreshStockNews(row) {
+  const ticker = row["الرمز"];
+  if (!ticker || state.stockNewsRequestTicker === ticker) return;
+  state.stockNewsRequestTicker = ticker;
+  const panel = document.getElementById("newsPanel");
+  if (state.activeStockTicker === ticker && panel) {
+    panel.innerHTML = '<span class="loading-spinner"></span> جاري تحديث الأخبار والإعلانات…';
+  }
   try {
-    const resp = await fetch(`${API_BASE}/api/stock/${encodeURIComponent(row["الرمز"])}/news?company_name=${encodeURIComponent(row["اسم الشركة"])}`);
+    const resp = await fetch(`${API_BASE}/api/stock/${encodeURIComponent(ticker)}/news?company_name=${encodeURIComponent(row["اسم الشركة"])}`);
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
-    renderNewsPanel(data);
-  } catch (e) {
-    const panel = document.getElementById("newsPanel");
-    if (panel) panel.textContent = "تعذّر جلب الأخبار حالياً؛ جرّب فتح التفاصيل مرة أخرى.";
+    if (state.activeStockTicker === ticker) renderNewsPanel(data);
+  } catch {
+    const activePanel = document.getElementById("newsPanel");
+    if (state.activeStockTicker === ticker && activePanel) {
+      activePanel.textContent = "تعذّر تحديث الأخبار الآن؛ ستتم إعادة المحاولة تلقائيًا.";
+    }
+  } finally {
+    if (state.stockNewsRequestTicker === ticker) state.stockNewsRequestTicker = null;
   }
+}
+
+function startStockNewsAutoRefresh(row) {
+  clearInterval(state.stockNewsTimer);
+  state.activeStockTicker = row["الرمز"];
+  refreshStockNews(row);
+  state.stockNewsTimer = setInterval(() => {
+    const isOpen = document.getElementById("detailOverlay").classList.contains("open");
+    if (isOpen && document.visibilityState === "visible" && state.activeStockTicker === row["الرمز"]) {
+      refreshStockNews(row);
+    }
+  }, STOCK_NEWS_AUTO_REFRESH_MS);
 }
 
 function renderNewsPanel(data) {
@@ -1292,11 +1360,48 @@ async function loadFedAnalysis(force = false) {
   container.innerHTML = html;
 }
 
+const MACRO_NEWS_AUTO_REFRESH_MS = 10 * 60 * 1000;
+
+function isMacroTabActive() {
+  return document.querySelector(".tab-btn.active")?.dataset.tab === "macro";
+}
+
+async function refreshMacroNews(force = false) {
+  if (state.macroNewsRequestInFlight) return;
+  state.macroNewsRequestInFlight = true;
+  try {
+    const [macroResult, fedResult] = await Promise.allSettled([loadMacroNews(force), loadFedAnalysis(force)]);
+    if (macroResult.status === "rejected") {
+      document.getElementById("macroNewsList").innerHTML = '<p style="color:var(--text-secondary);">تعذر تحديث الأخبار الآن؛ ستتم إعادة المحاولة تلقائيًا.</p>';
+    }
+    if (fedResult.status === "rejected") {
+      document.getElementById("fedNewsList").innerHTML = '<p style="color:var(--text-secondary);">تعذر تحديث تحليل الفيدرالي الآن؛ ستتم إعادة المحاولة تلقائيًا.</p>';
+    }
+  } finally {
+    state.macroNewsRequestInFlight = false;
+  }
+}
+
+function startMacroNewsAutoRefresh() {
+  clearInterval(state.macroNewsTimer);
+  refreshMacroNews();
+  state.macroNewsTimer = setInterval(() => {
+    if (document.visibilityState === "visible" && isMacroTabActive()) refreshMacroNews();
+  }, MACRO_NEWS_AUTO_REFRESH_MS);
+}
+
+function stopMacroNewsAutoRefresh() {
+  clearInterval(state.macroNewsTimer);
+  state.macroNewsTimer = null;
+}
+
 function switchTab(tabName) {
   document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b.dataset.tab === tabName));
   document.querySelectorAll(".tab-content").forEach(c => c.style.display = "none");
   document.getElementById(`tab-${tabName}`).style.display = "block";
   if (tabName === "favorites") renderFavorites();
+  if (tabName === "macro") startMacroNewsAutoRefresh();
+  else stopMacroNewsAutoRefresh();
 }
 
 async function exportExcel() {
@@ -1334,6 +1439,7 @@ function bindEvents() {
   document.getElementById("adminClose").addEventListener("click", () => closeOverlay("adminOverlay"));
   document.getElementById("logoutBtn").addEventListener("click", logout);
   document.getElementById("adminOpen").addEventListener("click", openAdminDashboard);
+  document.getElementById("adminBackupBtn").addEventListener("click", downloadAdminBackup);
   document.getElementById("authForm").addEventListener("submit", submitAuth);
   document.getElementById("guestBtn").addEventListener("click", continueAsGuest);
   document.querySelectorAll("[data-auth-mode]").forEach(button => button.addEventListener("click", () => setAuthMode(button.dataset.authMode)));
@@ -1346,11 +1452,9 @@ function bindEvents() {
     renderResultsTable(state.results);
     applySearch();
   });
-  document.getElementById("detailClose").addEventListener("click", () => {
-    document.getElementById("detailOverlay").classList.remove("open");
-  });
+  document.getElementById("detailClose").addEventListener("click", closeStockDetail);
   document.getElementById("detailOverlay").addEventListener("click", (e) => {
-    if (e.target.id === "detailOverlay") e.target.classList.remove("open");
+    if (e.target.id === "detailOverlay") closeStockDetail();
   });
   document.querySelectorAll(".tab-btn").forEach(btn => {
     btn.addEventListener("click", () => switchTab(btn.dataset.tab));
@@ -1362,7 +1466,7 @@ function bindEvents() {
     button.disabled = true;
     button.textContent = "جاري إعادة المحاولة…";
     try {
-      await Promise.all([loadMacroNews(true), loadFedAnalysis(true)]);
+      await refreshMacroNews(true);
     } finally {
       button.disabled = false;
       button.textContent = "↻ إعادة المحاولة اليدوية";
@@ -1374,6 +1478,11 @@ function bindEvents() {
   document.getElementById("sectorList").addEventListener("change", updateScanButtonState);
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) startLiveQuotesPolling();
+    if (!document.hidden && isMacroTabActive()) refreshMacroNews();
+    if (!document.hidden && state.activeStockTicker) {
+      const row = state.results.find(item => item["الرمز"] === state.activeStockTicker);
+      if (row) refreshStockNews(row);
+    }
   });
 }
 

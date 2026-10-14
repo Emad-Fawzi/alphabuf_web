@@ -143,6 +143,7 @@ select, input[type="number"], input[type="text"], input[type="email"], input[typ
 .auth-form input { margin-top: var(--space-1); }
 .auth-error { min-height: 1.5em; color: #f08a78; font-size: 13px; }
 .admin-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); }
+.admin-backup-btn { width: auto; margin: 0 0 var(--space-3); padding: var(--space-2) var(--space-3); font-size: 12px; }
 .metric-card { border: 1px solid var(--border-hairline); background: var(--bg-base); padding: var(--space-3); border-radius: var(--radius-sm); }
 .metric-card strong { display: block; font-family: var(--font-mono); font-size: 20px; color: var(--accent); }
 .metric-card span { color: var(--text-secondary); font-size: 12px; }

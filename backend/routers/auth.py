@@ -5,15 +5,21 @@ import hmac
 import os
 import secrets
 import sqlite3
+import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, field_validator
+from starlette.background import BackgroundTask
 
 router = APIRouter(tags=["auth"])
 
-_DB_PATH = Path(__file__).resolve().parent.parent / "alphabuf_accounts.sqlite3"
+_DEFAULT_DATA_DIR = Path(__file__).resolve().parent.parent
+_DATA_DIR = Path(os.getenv("APP_DATA_DIR", str(_DEFAULT_DATA_DIR))).expanduser()
+_DATA_DIR.mkdir(parents=True, exist_ok=True)
+_DB_PATH = _DATA_DIR / "alphabuf_accounts.sqlite3"
 _SESSION_COOKIE = "alphabuf_session"
 _VISITOR_COOKIE = "alphabuf_visitor"
 _SESSION_DAYS = 30
@@ -123,6 +129,13 @@ def _require_account(request):
     if not session or session["is_guest"] or not session["user_id"]:
         raise HTTPException(status_code=401, detail="سجّل الدخول أولاً لحفظ المفضلات في حسابك")
     return session
+
+
+def _delete_file(path):
+    try:
+        Path(path).unlink(missing_ok=True)
+    except OSError:
+        pass
 
 
 class Credentials(BaseModel):
@@ -269,3 +282,20 @@ def admin_metrics(request: Request):
         accounts = conn.execute("SELECT COUNT(*) FROM users WHERE email != ?", (_admin_email(),)).fetchone()[0]
     return {"today": today.isoformat(), "daily": [dict(row) for row in daily], "total_visits": total_visits,
             "unique_visitors": visitors, "accounts": accounts}
+
+
+@router.get("/api/admin/backup")
+def download_backup(request: Request):
+    """نسخة SQLite متسقة يمكن للمدير تنزيلها قبل أي نشر."""
+    _require_admin(request)
+    with tempfile.NamedTemporaryFile(prefix="alphabuf-backup-", suffix=".sqlite3", delete=False) as temp:
+        backup_path = Path(temp.name)
+    try:
+        with _connection() as source, sqlite3.connect(backup_path) as destination:
+            source.backup(destination)
+    except Exception:
+        _delete_file(backup_path)
+        raise
+    filename = f"alphabuf-backup-{_now().strftime('%Y-%m-%d-%H%M')}.sqlite3"
+    return FileResponse(backup_path, media_type="application/vnd.sqlite3", filename=filename,
+                        background=BackgroundTask(_delete_file, backup_path))
